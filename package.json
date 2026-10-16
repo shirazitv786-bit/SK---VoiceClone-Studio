@@ -1,0 +1,21 @@
+{
+  "name": "ai-voice-cloning-backend",
+  "version": "1.0.0",
+  "description": "Local AI Text-to-Speech and Voice Cloning Backend using Coqui XTTS-v2",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "server": "nodemon server.js",
+    "client": "npm run dev --prefix frontend",
+    "dev": "concurrently -n \"SERVER,CLIENT\" -c \"blue,magenta\" \"npm run server\" \"npm run client\""
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^4.22.3",
+    "multer": "^1.4.5-lts.2"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.6",
+    "nodemon": "^3.1.0"
+  }
+}

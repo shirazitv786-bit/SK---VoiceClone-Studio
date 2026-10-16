@@ -1,0 +1,15 @@
+{
+  "watch": ["server.js"],
+  "ext": "js,mjs,cjs",
+  "ignore": [
+    "audio/*",
+    "voices/*",
+    "temp/*",
+    "history.json",
+    "frontend/*",
+    "*.wav",
+    "*.mp3",
+    "*.json",
+    "*.txt"
+  ]
+}

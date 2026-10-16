@@ -1,0 +1,37 @@
+# Node Dependencies
+node_modules/
+*/node_modules/
+
+# Python Virtual Environments & Bytecode
+venv/
+.venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Frontend Production Builds
+frontend/dist/
+frontend/dist-ssr/
+
+# Runtime Audio & Temp Directories (keep folders via .gitkeep)
+audio/*.wav
+audio/*.mp3
+!audio/.gitkeep
+temp/*
+!temp/.gitkeep
+
+# Environment variables & Logs
+.env
+.env.local
+*.log
+npm-debug.log*
+
+# System & Editor configs
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
