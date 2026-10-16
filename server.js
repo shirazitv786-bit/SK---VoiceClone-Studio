@@ -23,17 +23,32 @@ if (!fs.existsSync(audioDir)) fs.mkdirSync(audioDir, { recursive: true });
 if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 if (!fs.existsSync(historyFile)) fs.writeFileSync(historyFile, JSON.stringify([], null, 2));
 
-// Serve static assets from project root and dedicated /audio route
-app.use(express.static(__dirname));
+const frontendDist = path.join(__dirname, 'frontend', 'dist');
+
+// Serve static assets from frontend build, dedicated audio and voices directories
+if (fs.existsSync(frontendDist)) {
+  app.use(express.static(frontendDist));
+}
+app.use('/voices', express.static(voicesDir));
 app.use('/audio', express.static(audioDir));
+app.use(express.static(__dirname));
 
 // Helper: Determine python executable path (checks local venv first, unquoted for execFile)
 const getPythonExecutable = () => {
+  if (process.env.PYTHON_PATH) return process.env.PYTHON_PATH;
   const venvPythonWin = path.join(__dirname, 'venv', 'Scripts', 'python.exe');
   const venvPythonUnix = path.join(__dirname, 'venv', 'bin', 'python');
   if (fs.existsSync(venvPythonWin)) return venvPythonWin;
   if (fs.existsSync(venvPythonUnix)) return venvPythonUnix;
-  return process.env.PYTHON_PATH || 'python';
+
+  // On Linux (Railway, Docker, Ubuntu), test if python3 is available
+  try {
+    const { execSync } = require('child_process');
+    execSync('python3 --version', { stdio: 'ignore' });
+    return 'python3';
+  } catch (e) {
+    return 'python';
+  }
 };
 
 // Helper functions for history management
@@ -341,6 +356,30 @@ app.delete('/api/cleanup-audio', (req, res) => {
     console.error('Cleanup operation failed:', err);
     return res.status(500).json({ error: 'Failed to clean audio storage.', details: err.message });
   }
+});
+
+// SPA Fallback: Serve frontend/dist/index.html for client-side routing
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api') || req.path.startsWith('/audio') || req.path.startsWith('/voices')) {
+    return next();
+  }
+  const indexPath = path.join(frontendDist, 'index.html');
+  if (fs.existsSync(indexPath)) {
+    return res.sendFile(indexPath);
+  }
+  res.status(200).send(`
+    <!DOCTYPE html>
+    <html>
+      <head><title>SK - VoiceClone Studio</title></head>
+      <body style="font-family:sans-serif;background:#09090b;color:#f4f4f5;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
+        <div style="text-align:center;max-width:500px;padding:24px;border:1px solid #27272a;border-radius:16px;background:#18181b;">
+          <h2>SK - VoiceClone Studio Backend Active</h2>
+          <p style="color:#a1a1aa;font-size:14px;">The API server is running, but the frontend build was not found in <code>frontend/dist</code>.</p>
+          <p style="color:#a1a1aa;font-size:13px;">If you just deployed to Railway, ensure the build command <code>npm run build</code> ran during deployment.</p>
+        </div>
+      </body>
+    </html>
+  `);
 });
 
 // Multer & Error Handling Middleware

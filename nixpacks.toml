@@ -1,0 +1,12 @@
+[phases.setup]
+nixPkgs = ["nodejs_20", "python311", "python311Packages.pip", "ffmpeg"]
+
+[phases.install]
+cmds = [
+    "npm install",
+    "npm run build",
+    "python3 -m pip install --no-cache-dir -r requirements.txt"
+]
+
+[start]
+cmd = "node server.js"

@@ -13,8 +13,7 @@ __pycache__/
 *.so
 .Python
 
-# Frontend Production Builds
-frontend/dist/
+# Frontend SSR
 frontend/dist-ssr/
 
 # Runtime Audio & Temp Directories (keep folders via .gitkeep)

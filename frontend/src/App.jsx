@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 
-// Backend API URL (can use proxy or direct port 5000)
-const API_BASE = 'http://localhost:5000';
+// Backend API URL: relative in production (same origin), localhost:5000 when running standalone Vite dev server
+const API_BASE = typeof window !== 'undefined' && window.location.port === '5173' ? 'http://localhost:5000' : '';
 
 export default function App() {
   // Theme state: dark / light
