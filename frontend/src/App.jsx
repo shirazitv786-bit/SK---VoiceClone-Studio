@@ -26,8 +26,16 @@ export default function App() {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const fileInputRef = useRef(null);
 
-  // History States
-  const [history, setHistory] = useState([]);
+  // History States - Isolated per device using browser localStorage
+  const LOCAL_STORAGE_KEY = 'sk_voiceclone_studio_history';
+  const [history, setHistory] = useState(() => {
+    try {
+      const saved = localStorage.getItem('sk_voiceclone_studio_history');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [searchHistory, setSearchHistory] = useState('');
   const audioPlayerRef = useRef(null);
@@ -97,17 +105,29 @@ export default function App() {
     }
   };
 
-  // Fetch generation history
+  // Fetch generation history from this device's localStorage
   const fetchHistory = async () => {
     setLoadingHistory(true);
     try {
-      const res = await axios.get(`${API_BASE}/api/history`);
-      setHistory(res.data.history || []);
+      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (saved) {
+        setHistory(JSON.parse(saved));
+      } else {
+        // If device has no local history yet, seed from server once
+        try {
+          const res = await axios.get(`${API_BASE}/api/history`);
+          const serverList = res.data.history || [];
+          if (serverList.length > 0) {
+            setHistory(serverList);
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(serverList));
+          }
+        } catch (e) { }
+      }
       setServerOnline(true);
     } catch (err) {
       console.warn('Unable to load history:', err.message);
     } finally {
-      setLoadingHistory(false);
+      setTimeout(() => setLoadingHistory(false), 150);
     }
   };
 
@@ -192,7 +212,27 @@ export default function App() {
         const rawUrl = response.data.audioUrl;
         const fullAudioUrl = rawUrl.startsWith('http') ? rawUrl : `${API_BASE}${rawUrl}`;
         setAudioUrl(fullAudioUrl);
-        fetchHistory();
+
+        // Prepend new record to this device's localStorage
+        const newRecord = response.data.historyRecord || {
+          id: `conv_${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          text: text.trim().length > 120 ? text.trim().substring(0, 120) + '...' : text.trim(),
+          referenceVoice: referenceVoice,
+          emotion: emotion,
+          styleDegree: styleDegree,
+          audioUrl: rawUrl
+        };
+
+        setHistory((prevHistory) => {
+          const updated = [newRecord, ...prevHistory.filter((item) => item.id !== newRecord.id)].slice(0, 50);
+          try {
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
+          } catch (e) {
+            console.warn('Could not save to localStorage:', e);
+          }
+          return updated;
+        });
 
         setTimeout(() => {
           if (audioPlayerRef.current) {
@@ -224,18 +264,32 @@ export default function App() {
     }, 100);
   };
 
-  // Storage cleanup handler
-  const handleCleanupStorage = async () => {
-    if (!window.confirm('Are you sure you want to delete all generated audio and clear history?')) {
+  // Storage cleanup handler - Clears history on THIS device only
+  const handleCleanupStorage = () => {
+    if (!window.confirm('Clear history on this device? (Your other devices will not be affected)')) {
       return;
     }
     try {
-      await axios.delete(`${API_BASE}/api/cleanup-audio?all=true`);
+      localStorage.removeItem(LOCAL_STORAGE_KEY);
       setHistory([]);
       setAudioUrl(null);
     } catch (err) {
-      alert(`Cleanup failed: ${err.response?.data?.details || err.message}`);
+      console.error('Failed to clear local history:', err);
     }
+  };
+
+  // Delete an individual history item from THIS device
+  const handleDeleteHistoryItem = (itemId, e) => {
+    if (e) e.stopPropagation();
+    setHistory((prevHistory) => {
+      const updated = prevHistory.filter((item) => item.id !== itemId);
+      try {
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
+      } catch (err) {
+        console.error('Failed to update localStorage:', err);
+      }
+      return updated;
+    });
   };
 
   // Preset script helpers
@@ -687,7 +741,7 @@ export default function App() {
                   {/* Breathing Pause Slider */}
                   <div>
                     <div className="flex justify-between items-center text-xs mb-1">
-                      <span className="font-semibold">🫁 Breath & Pause</span>
+                      <span className="font-semibold"> Breath & Pause</span>
                       <span className={`font-mono text-xs font-bold ${isDarkMode ? 'text-white' : 'text-black'}`}>
                         {pause.toFixed(2)}s
                       </span>
@@ -939,7 +993,7 @@ export default function App() {
                   <button
                     onClick={handleCleanupStorage}
                     className="p-1.5 rounded-lg border border-rose-500/30 text-rose-400 hover:bg-rose-500/10 transition-all"
-                    title="Clear all audio files and history"
+                    title="Clear history on this device"
                   >
                     <svg width="14" height="14" className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -1048,6 +1102,20 @@ export default function App() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                           </svg>
                         </a>
+
+                        {/* Remove from this device */}
+                        <button
+                          onClick={(e) => handleDeleteHistoryItem(item.id, e)}
+                          className={`p-1 rounded-md border transition-all ${isDarkMode
+                            ? 'border-zinc-800 hover:bg-zinc-800 text-zinc-400 hover:text-rose-400'
+                            : 'border-zinc-300 hover:bg-zinc-100 text-zinc-500 hover:text-rose-600'
+                            }`}
+                          title="Remove from this device"
+                        >
+                          <svg width="12" height="12" className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
                       </div>
                     </div>
                   </div>
