@@ -4,7 +4,7 @@ FROM node:20-bookworm-slim
 # Prevent interactive prompts during apt installs
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install Python 3, pip, venv, ffmpeg, libsndfile1 and certificates
+# Install Python 3, pip, venv, ffmpeg, libsndfile1, build tools and certificates
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsndfile1 \
     ca-certificates \
     curl \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 # Set up isolated Python virtual environment
@@ -23,28 +24,24 @@ ENV PYTHON_PATH="/opt/venv/bin/python"
 # App workspace
 WORKDIR /app
 
-# Install Python dependencies first for caching
+# Install Python dependencies first for layer caching
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy package files
-COPY package*.json ./
-COPY frontend/package*.json ./frontend/
-
-# Install root dependencies
-RUN npm install
-
-# Copy application source code
+# Copy all application files before npm install so postinstall build succeeds
 COPY . .
 
-# Build the frontend production assets
+# Install Node dependencies (postinstall automatically builds frontend/dist)
+RUN npm install
+
+# Build frontend production bundle
 RUN npm run build
 
 # Application environment configuration
 ENV NODE_ENV=production
 ENV PORT=5000
 
-# Expose port (Railway overrides PORT via environment variable)
+# Expose port (Railway dynamically injects PORT)
 EXPOSE 5000
 
 # Start Express server
