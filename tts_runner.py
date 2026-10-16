@@ -374,9 +374,16 @@ async def generate_edge_neural_tts(
         if not os.path.isfile(temp_mp3) or os.path.getsize(temp_mp3) == 0:
             raise RuntimeError("Edge-TTS synthesis failed: Empty audio output generated.")
 
-        # Convert to 16-bit PCM standard WAV using soundfile
-        audio_data, sample_rate = sf.read(temp_mp3)
-        sf.write(output_wav_path, audio_data, sample_rate, subtype="PCM_16")
+        # Convert to 16-bit PCM standard WAV using soundfile (with FFmpeg fallback)
+        try:
+            audio_data, sample_rate = sf.read(temp_mp3)
+            sf.write(output_wav_path, audio_data, sample_rate, subtype="PCM_16")
+        except Exception as sf_err:
+            if shutil.which("ffmpeg"):
+                cmd = ["ffmpeg", "-y", "-i", temp_mp3, "-acodec", "pcm_s16le", "-ar", "24000", output_wav_path]
+                subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            else:
+                raise sf_err
 
         # Apply studio mastering
         post_process_human_audio(output_wav_path)
@@ -685,19 +692,23 @@ def main():
             print(f"[WARNING] Neural Voice synthesis failed: {err}")
 
     # =========================================================================
-    # OPTION C: EMERGENCY WINDOWS NATIVE TTS (Last resort only)
+    # OPTION C: EMERGENCY WINDOWS NATIVE TTS (Last resort on Windows only)
     # =========================================================================
-    print("[NOTICE] Using Emergency Windows Native Fallback.")
-    try:
-        generate_windows_native_tts_fallback(text_input, output_file_path)
-        if os.path.isfile(output_file_path) and os.path.getsize(output_file_path) > 0:
-            print(f"SUCCESS: Generated via fallback TTS: {output_file_path}")
-            sys.exit(0)
-        else:
-            sys.stderr.write("Error: Output file not created.\n")
+    if sys.platform == "win32":
+        print("[NOTICE] Using Emergency Windows Native Fallback.")
+        try:
+            generate_windows_native_tts_fallback(text_input, output_file_path)
+            if os.path.isfile(output_file_path) and os.path.getsize(output_file_path) > 0:
+                print(f"SUCCESS: Generated via fallback TTS: {output_file_path}")
+                sys.exit(0)
+            else:
+                sys.stderr.write("Error: Output file not created.\n")
+                sys.exit(1)
+        except Exception as e:
+            sys.stderr.write(f"Fatal error during TTS generation: {e}\n")
             sys.exit(1)
-    except Exception as e:
-        sys.stderr.write(f"Fatal error during TTS generation: {e}\n")
+    else:
+        sys.stderr.write("Voice generation failed: Neural Edge-TTS engine was unable to synthesize audio on server.\n")
         sys.exit(1)
 
 

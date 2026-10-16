@@ -1,0 +1,15 @@
+node_modules/
+*/node_modules/
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+.git/
+.env
+.env.local
+*.log
+audio/*.wav
+audio/*.mp3
+!audio/.gitkeep
+temp/*
+!temp/.gitkeep

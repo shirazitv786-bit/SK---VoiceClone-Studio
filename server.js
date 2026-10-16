@@ -33,23 +33,59 @@ app.use('/voices', express.static(voicesDir));
 app.use('/audio', express.static(audioDir));
 app.use(express.static(__dirname));
 
-// Helper: Determine python executable path (checks local venv first, unquoted for execFile)
+// Helper: Determine python executable path (checks Docker venv, local venv, and system paths)
 const getPythonExecutable = () => {
-  if (process.env.PYTHON_PATH) return process.env.PYTHON_PATH;
+  if (process.env.PYTHON_PATH) {
+    if (fs.existsSync(process.env.PYTHON_PATH)) return process.env.PYTHON_PATH;
+    try {
+      const { execSync } = require('child_process');
+      execSync(`"${process.env.PYTHON_PATH}" --version`, { stdio: 'ignore' });
+      return process.env.PYTHON_PATH;
+    } catch (e) {}
+  }
+
+  // Check Docker / Linux virtual environments
+  const optVenvPython = '/opt/venv/bin/python';
+  if (fs.existsSync(optVenvPython)) return optVenvPython;
+
   const venvPythonWin = path.join(__dirname, 'venv', 'Scripts', 'python.exe');
   const venvPythonUnix = path.join(__dirname, 'venv', 'bin', 'python');
   if (fs.existsSync(venvPythonWin)) return venvPythonWin;
   if (fs.existsSync(venvPythonUnix)) return venvPythonUnix;
 
-  // On Linux (Railway, Docker, Ubuntu), test if python3 is available
+  const { execSync } = require('child_process');
+
+  // Test python3 command in PATH
   try {
-    const { execSync } = require('child_process');
     execSync('python3 --version', { stdio: 'ignore' });
     return 'python3';
-  } catch (e) {
+  } catch (e) {}
+
+  // Test python command in PATH
+  try {
+    execSync('python --version', { stdio: 'ignore' });
     return 'python';
-  }
+  } catch (e) {}
+
+  // Common Linux paths
+  if (fs.existsSync('/usr/bin/python3')) return '/usr/bin/python3';
+  if (fs.existsSync('/usr/local/bin/python3')) return '/usr/local/bin/python3';
+  if (fs.existsSync('/root/.nix-profile/bin/python3')) return '/root/.nix-profile/bin/python3';
+  if (fs.existsSync('/usr/bin/python')) return '/usr/bin/python';
+
+  return 'python3';
 };
+
+// Log resolved Python executable on server startup
+const detectedPython = getPythonExecutable();
+console.log(`[TTS Engine] Python runtime resolved to: ${detectedPython}`);
+try {
+  const { execSync } = require('child_process');
+  const pVer = execSync(`"${detectedPython}" --version`, { encoding: 'utf8' }).trim();
+  console.log(`[TTS Engine] Python version: ${pVer}`);
+} catch (pErr) {
+  console.warn(`[TTS Engine] Warning: Could not verify Python executable "${detectedPython}":`, pErr.message);
+}
 
 // Helper functions for history management
 const readHistory = () => {
@@ -270,10 +306,14 @@ app.post('/api/clone-voice', (req, res) => {
 
     if (error) {
       console.error('Python TTS execution failed:\n', stderr || error.message);
+      let errorDetails = stderr || error.message;
+      if (error.code === 'ENOENT') {
+        errorDetails = `Python runtime not found (${pythonBin}). Please verify Python 3 is installed.`;
+      }
       return res.status(500).json({
         success: false,
         error: 'Voice cloning generation failed.',
-        details: stderr || error.message
+        details: errorDetails
       });
     }
 
