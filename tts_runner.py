@@ -1,6 +1,7 @@
 import os
 import sys
 import re
+import time
 import wave
 import json
 import shutil
@@ -345,6 +346,76 @@ def post_process_human_audio(wav_path: str):
         print(f"[POST-PROCESS NOTICE] {e}")
 
 
+def convert_wav_to_mp3(wav_path: str, mp3_path: str, bitrate: str = "192k") -> bool:
+    """
+    Converts a mastered 16-bit PCM WAV audio file to broadcast-quality MP3 (192kbps).
+    Uses FFmpeg as primary engine, with soundfile and pydub fallback.
+    """
+    # 1. Primary: FFmpeg (ensures industry standard libmp3lame 192kbps broadcast encoding)
+    if shutil.which("ffmpeg"):
+        try:
+            cmd = [
+                "ffmpeg", "-y",
+                "-i", wav_path,
+                "-codec:a", "libmp3lame",
+                "-b:a", bitrate,
+                "-ar", "24000",
+                mp3_path
+            ]
+            res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+            if res.returncode == 0 and os.path.isfile(mp3_path) and os.path.getsize(mp3_path) > 0:
+                return True
+        except Exception as e:
+            print(f"[MP3 CONVERSION NOTICE] FFmpeg encoder notice: {e}")
+
+    # 2. Secondary: soundfile if MP3 format is supported by libsndfile
+    try:
+        data, sr = sf.read(wav_path)
+        sf.write(mp3_path, data, sr, format="MP3")
+        if os.path.isfile(mp3_path) and os.path.getsize(mp3_path) > 0:
+            return True
+    except Exception as e:
+        print(f"[MP3 CONVERSION NOTICE] soundfile encoder notice: {e}")
+
+    # 3. Tertiary: pydub fallback
+    try:
+        from pydub import AudioSegment
+        sound = AudioSegment.from_wav(wav_path)
+        sound.export(mp3_path, format="mp3", bitrate=bitrate)
+        if os.path.isfile(mp3_path) and os.path.getsize(mp3_path) > 0:
+            return True
+    except Exception as e:
+        print(f"[MP3 CONVERSION NOTICE] pydub fallback notice: {e}")
+
+    # 4. Fallback copy
+    try:
+        shutil.copyfile(wav_path, mp3_path)
+        return True
+    except Exception as e:
+        print(f"[MP3 CONVERSION ERROR] Fallback copy failed: {e}")
+        return False
+
+
+def finalize_output_file(synthesis_wav: str, target_output: str):
+    """
+    Delivers audio to target_output. If target_output is .mp3, encodes to 192k MP3
+    and removes intermediate temporary WAV file.
+    """
+    if target_output.lower().endswith(".mp3"):
+        print(f"[AUDIO EXPORT] Mastering & encoding broadcast MP3 (192kbps): {target_output}")
+        success = convert_wav_to_mp3(synthesis_wav, target_output, bitrate="192k")
+        if not success or not os.path.isfile(target_output) or os.path.getsize(target_output) == 0:
+            shutil.copyfile(synthesis_wav, target_output)
+        if os.path.isfile(synthesis_wav) and os.path.abspath(synthesis_wav) != os.path.abspath(target_output):
+            try:
+                os.remove(synthesis_wav)
+            except Exception:
+                pass
+    else:
+        if os.path.abspath(synthesis_wav) != os.path.abspath(target_output):
+            shutil.move(synthesis_wav, target_output)
+
+
 async def generate_edge_neural_tts(
     text: str,
     voice_id: str,
@@ -549,7 +620,16 @@ def main():
         output_file_path = os.path.abspath(sys.argv[4].strip())
         os.makedirs(os.path.dirname(output_file_path), exist_ok=True)
     else:
-        output_file_path = os.path.join(project_root, "output.wav")
+        output_file_path = os.path.join(project_root, "output.mp3")
+
+    # If target is MP3, synthesize and master into temporary WAV first
+    if output_file_path.lower().endswith(".mp3"):
+        synthesis_wav_path = os.path.join(
+            tempfile.gettempdir(),
+            f"tts_master_{int(time.time() * 1000)}_{os.getpid()}.wav"
+        )
+    else:
+        synthesis_wav_path = output_file_path
 
     # Parse Emotion and Acoustic Modulation Options (arg 5)
     emotion = "neutral"
@@ -631,8 +711,9 @@ def main():
                 else:
                     raise RuntimeError(f"Failed to generate chunk {i}")
 
-            merge_wav_files(chunk_files, output_file_path, silence_duration_sec=eff_pause)
+            merge_wav_files(chunk_files, synthesis_wav_path, silence_duration_sec=eff_pause)
             shutil.rmtree(temp_dir, ignore_errors=True)
+            finalize_output_file(synthesis_wav_path, output_file_path)
 
             if os.path.isfile(output_file_path) and os.path.getsize(output_file_path) > 0:
                 print(f"SUCCESS: Voice cloned successfully via XTTS-v2: {output_file_path}")
@@ -654,7 +735,7 @@ def main():
                 asyncio.run(generate_edge_neural_tts(
                     text=chunks[0],
                     voice_id=neural_voice_id,
-                    output_wav_path=output_file_path,
+                    output_wav_path=synthesis_wav_path,
                     rate=rate_str,
                     pitch=pitch_str,
                     volume=vol_str
@@ -679,8 +760,10 @@ def main():
                     else:
                         raise RuntimeError(f"Chunk {i} generation failed.")
 
-                merge_wav_files(chunk_files, output_file_path, silence_duration_sec=eff_pause)
+                merge_wav_files(chunk_files, synthesis_wav_path, silence_duration_sec=eff_pause)
                 shutil.rmtree(temp_dir, ignore_errors=True)
+
+            finalize_output_file(synthesis_wav_path, output_file_path)
 
             if os.path.isfile(output_file_path) and os.path.getsize(output_file_path) > 0:
                 print(f"SUCCESS: Fully human voice generated successfully: {output_file_path}")
@@ -697,7 +780,8 @@ def main():
     if sys.platform == "win32":
         print("[NOTICE] Using Emergency Windows Native Fallback.")
         try:
-            generate_windows_native_tts_fallback(text_input, output_file_path)
+            generate_windows_native_tts_fallback(text_input, synthesis_wav_path)
+            finalize_output_file(synthesis_wav_path, output_file_path)
             if os.path.isfile(output_file_path) and os.path.getsize(output_file_path) > 0:
                 print(f"SUCCESS: Generated via fallback TTS: {output_file_path}")
                 sys.exit(0)

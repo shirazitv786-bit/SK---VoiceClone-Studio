@@ -298,7 +298,7 @@ app.post('/api/clone-voice', (req, res) => {
 
   // Generate unique timestamped output audio filename and destination path
   const timestamp = Date.now();
-  const audioFilename = `output_${timestamp}.wav`;
+  const audioFilename = `output_${timestamp}.mp3`;
   const targetAudioPath = path.join(audioDir, audioFilename);
 
   // Temporary file for safe script handling without Windows CLI arg limits
@@ -408,7 +408,7 @@ app.post('/api/clone-voice', (req, res) => {
 app.delete('/api/cleanup-audio', (req, res) => {
   try {
     const { all, olderThanHours } = req.query;
-    const files = fs.readdirSync(audioDir).filter(f => f.startsWith('output_') && f.endsWith('.wav'));
+    const files = fs.readdirSync(audioDir).filter(f => f.startsWith('output_') && (f.endsWith('.mp3') || f.endsWith('.wav')));
     let deletedCount = 0;
     const now = Date.now();
     const maxAgeMs = olderThanHours ? parseFloat(olderThanHours) * 3600 * 1000 : 0;

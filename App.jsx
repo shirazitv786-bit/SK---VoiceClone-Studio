@@ -522,13 +522,13 @@ export default function App() {
                 </div>
                 <a
                   href={audioUrl}
-                  download="cloned_voice.wav"
+                  download={`cloned_voice.${audioUrl?.endsWith('.wav') ? 'wav' : 'mp3'}`}
                   className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-all shadow-md shadow-indigo-600/20"
                 >
                   <svg width="14" height="14" className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                   </svg>
-                  Download .WAV
+                  {audioUrl?.endsWith('.wav') ? 'Download .WAV' : 'Download MP3'}
                 </a>
               </div>
 
@@ -671,11 +671,11 @@ export default function App() {
                         {/* Direct Download Link */}
                         <a
                           href={item.audioUrl.startsWith('http') ? item.audioUrl : `${API_BASE}${item.audioUrl}`}
-                          download={`voice_${item.id}.wav`}
+                          download={`voice_${item.id}.${item.audioUrl?.endsWith('.wav') ? 'wav' : 'mp3'}`}
                           className={`p-1 rounded-md border transition-all ${
                             isDarkMode ? 'border-slate-800 hover:bg-slate-800 text-slate-400' : 'border-slate-300 hover:bg-slate-100 text-slate-600'
                           }`}
-                          title="Download Audio"
+                          title={`Download ${item.audioUrl?.endsWith('.wav') ? 'WAV' : 'MP3'}`}
                         >
                           <svg width="12" height="12" className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
