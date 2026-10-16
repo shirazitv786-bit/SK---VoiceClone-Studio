@@ -20,10 +20,6 @@ RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 ENV PYTHON_PATH="/opt/venv/bin/python"
 
-# Symlink system python commands to the virtual environment
-RUN ln -sf /opt/venv/bin/python /usr/bin/python && \
-    ln -sf /opt/venv/bin/python3 /usr/bin/python3
-
 # App workspace
 WORKDIR /app
 
