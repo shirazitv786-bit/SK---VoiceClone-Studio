@@ -4,6 +4,22 @@ import axios from 'axios';
 // Backend API URL: relative in production (same origin), localhost:5000 when running standalone Vite dev server
 const API_BASE = typeof window !== 'undefined' && window.location.port === '5173' ? 'http://localhost:5000' : '';
 
+// Unique anonymous device token helper (guarantees device-specific isolation and background persistence)
+const getDeviceId = () => {
+  const DEVICE_ID_KEY = 'sk_voiceclone_device_id';
+  let devId = null;
+  try {
+    devId = localStorage.getItem(DEVICE_ID_KEY);
+    if (!devId) {
+      devId = 'dev_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 10);
+      localStorage.setItem(DEVICE_ID_KEY, devId);
+    }
+  } catch (e) {
+    devId = 'dev_temp_' + Math.random().toString(36).substring(2, 10);
+  }
+  return devId;
+};
+
 export default function App() {
   // Theme state: dark / light
   const [isDarkMode, setIsDarkMode] = useState(true);
@@ -105,15 +121,26 @@ export default function App() {
     }
   };
 
-  // Fetch generation history strictly from this device's browser localStorage
-  const fetchHistory = () => {
+  // Fetch generation history for THIS device from server (synced with localStorage)
+  const fetchHistory = async () => {
     setLoadingHistory(true);
+    const devId = getDeviceId();
     try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-      setHistory(saved ? JSON.parse(saved) : []);
+      const res = await axios.get(`${API_BASE}/api/history`, {
+        params: { deviceId: devId }
+      });
+      const serverHistory = res.data.history || [];
+      setHistory(serverHistory);
+      try {
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(serverHistory));
+      } catch (e) {}
+      setServerOnline(true);
     } catch (err) {
-      console.warn('Unable to load localStorage history:', err.message);
-      setHistory([]);
+      console.warn('Unable to load history from server, using local cache:', err.message);
+      try {
+        const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+        if (saved) setHistory(JSON.parse(saved));
+      } catch (e) {}
     } finally {
       setTimeout(() => setLoadingHistory(false), 150);
     }
@@ -192,7 +219,8 @@ export default function App() {
         styleDegree: styleDegree,
         speed: speed,
         pitch: pitch,
-        pause: pause
+        pause: pause,
+        deviceId: getDeviceId()
       });
 
       if (response.data && response.data.success) {
@@ -252,23 +280,28 @@ export default function App() {
     }, 100);
   };
 
-  // Storage cleanup handler - Clears history on THIS device only
-  const handleCleanupStorage = () => {
+  // Storage cleanup handler - Clears history on THIS device only (server + localStorage)
+  const handleCleanupStorage = async () => {
     if (!window.confirm('Clear history on this device? (Your other devices will not be affected)')) {
       return;
     }
+    const devId = getDeviceId();
     try {
       localStorage.removeItem(LOCAL_STORAGE_KEY);
       setHistory([]);
       setAudioUrl(null);
+      await axios.delete(`${API_BASE}/api/history`, {
+        params: { deviceId: devId }
+      });
     } catch (err) {
-      console.error('Failed to clear local history:', err);
+      console.error('Failed to clear device history on server:', err);
     }
   };
 
-  // Delete an individual history item from THIS device
-  const handleDeleteHistoryItem = (itemId, e) => {
+  // Delete an individual history item from THIS device (server + localStorage)
+  const handleDeleteHistoryItem = async (itemId, e) => {
     if (e) e.stopPropagation();
+    const devId = getDeviceId();
     setHistory((prevHistory) => {
       const updated = prevHistory.filter((item) => item.id !== itemId);
       try {
@@ -278,6 +311,13 @@ export default function App() {
       }
       return updated;
     });
+    try {
+      await axios.delete(`${API_BASE}/api/history`, {
+        params: { deviceId: devId, itemId: itemId }
+      });
+    } catch (err) {
+      console.warn('Failed to delete history item on server:', err.message);
+    }
   };
 
   // Preset script helpers

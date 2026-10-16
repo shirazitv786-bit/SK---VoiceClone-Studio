@@ -103,7 +103,7 @@ const appendHistory = (entry) => {
   try {
     const list = readHistory();
     list.unshift(entry); // Newest records at top
-    fs.writeFileSync(historyFile, JSON.stringify(list.slice(0, 100), null, 2), 'utf8');
+    fs.writeFileSync(historyFile, JSON.stringify(list.slice(0, 500), null, 2), 'utf8');
   } catch (err) {
     console.error('Error writing to history.json:', err);
   }
@@ -180,10 +180,67 @@ app.post('/api/upload-voice', upload.single('voiceSample'), (req, res) => {
 
 /**
  * GET /api/history
- * History is strictly managed client-side per device (localStorage); returns empty list to prevent cross-device leaks
+ * Returns voice conversion records filtered strictly by deviceId
  */
 app.get('/api/history', (req, res) => {
-  res.json({ history: [] });
+  const { deviceId } = req.query;
+  if (!deviceId) {
+    return res.json({ history: [] });
+  }
+  const allHistory = readHistory();
+  const deviceHistory = allHistory.filter(item => item.deviceId === deviceId);
+  return res.json({ history: deviceHistory });
+});
+
+/**
+ * DELETE /api/history
+ * Deletes records for a specific deviceId (all or single item) and safely cleans up audio files
+ */
+app.delete('/api/history', (req, res) => {
+  try {
+    const { deviceId, itemId } = req.query;
+    if (!deviceId) {
+      return res.status(400).json({ error: 'deviceId is required to delete history.' });
+    }
+
+    const allHistory = readHistory();
+    let toDelete = [];
+    let remaining = [];
+
+    if (itemId) {
+      toDelete = allHistory.filter(item => item.deviceId === deviceId && item.id === itemId);
+      remaining = allHistory.filter(item => !(item.deviceId === deviceId && item.id === itemId));
+    } else {
+      toDelete = allHistory.filter(item => item.deviceId === deviceId);
+      remaining = allHistory.filter(item => item.deviceId !== deviceId);
+    }
+
+    // Safely remove associated audio files from disk
+    toDelete.forEach(entry => {
+      if (entry.audioUrl) {
+        const filename = path.basename(entry.audioUrl);
+        const filePath = path.join(audioDir, filename);
+        if (fs.existsSync(filePath)) {
+          try {
+            fs.unlinkSync(filePath);
+          } catch (e) {
+            console.warn(`Could not delete audio file ${filename}:`, e.message);
+          }
+        }
+      }
+    });
+
+    fs.writeFileSync(historyFile, JSON.stringify(remaining, null, 2), 'utf8');
+
+    return res.json({
+      success: true,
+      deletedCount: toDelete.length,
+      remainingCount: remaining.filter(item => item.deviceId === deviceId).length
+    });
+  } catch (err) {
+    console.error('Error deleting device history:', err);
+    return res.status(500).json({ error: 'Failed to delete history.', details: err.message });
+  }
 });
 
 /**
@@ -218,7 +275,8 @@ app.post('/api/clone-voice', (req, res) => {
     styleDegree = 1.0,
     speed = -8,
     pitch = -4,
-    pause = 0.22
+    pause = 0.22,
+    deviceId = 'anonymous'
   } = req.body;
 
   if (!text || !text.trim()) {
@@ -321,9 +379,10 @@ app.post('/api/clone-voice', (req, res) => {
     // Relative audio URL served via /audio route
     const audioUrl = `/audio/${audioFilename}`;
 
-    // Metadata for this conversion (returned exclusively to the requesting device)
+    // Metadata for this conversion (tagged by deviceId for background completion & device isolation)
     const historyEntry = {
       id: `conv_${timestamp}`,
+      deviceId: deviceId,
       timestamp: new Date().toISOString(),
       text: text.trim().length > 120 ? text.trim().substring(0, 120) + '...' : text.trim(),
       referenceVoice: referenceVoice,
@@ -331,6 +390,8 @@ app.post('/api/clone-voice', (req, res) => {
       styleDegree: optionsPayload.styleDegree,
       audioUrl: audioUrl
     };
+
+    appendHistory(historyEntry);
 
     return res.json({
       success: true,
