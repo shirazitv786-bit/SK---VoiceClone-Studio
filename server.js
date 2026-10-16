@@ -180,11 +180,10 @@ app.post('/api/upload-voice', upload.single('voiceSample'), (req, res) => {
 
 /**
  * GET /api/history
- * Returns the list of past script voice conversion records
+ * History is strictly managed client-side per device (localStorage); returns empty list to prevent cross-device leaks
  */
 app.get('/api/history', (req, res) => {
-  const history = readHistory();
-  res.json({ history });
+  res.json({ history: [] });
 });
 
 /**
@@ -322,7 +321,7 @@ app.post('/api/clone-voice', (req, res) => {
     // Relative audio URL served via /audio route
     const audioUrl = `/audio/${audioFilename}`;
 
-    // Record this conversion in history.json
+    // Metadata for this conversion (returned exclusively to the requesting device)
     const historyEntry = {
       id: `conv_${timestamp}`,
       timestamp: new Date().toISOString(),
@@ -332,8 +331,6 @@ app.post('/api/clone-voice', (req, res) => {
       styleDegree: optionsPayload.styleDegree,
       audioUrl: audioUrl
     };
-
-    appendHistory(historyEntry);
 
     return res.json({
       success: true,

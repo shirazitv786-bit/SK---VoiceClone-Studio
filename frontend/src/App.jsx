@@ -105,27 +105,15 @@ export default function App() {
     }
   };
 
-  // Fetch generation history from this device's localStorage
-  const fetchHistory = async () => {
+  // Fetch generation history strictly from this device's browser localStorage
+  const fetchHistory = () => {
     setLoadingHistory(true);
     try {
       const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (saved) {
-        setHistory(JSON.parse(saved));
-      } else {
-        // If device has no local history yet, seed from server once
-        try {
-          const res = await axios.get(`${API_BASE}/api/history`);
-          const serverList = res.data.history || [];
-          if (serverList.length > 0) {
-            setHistory(serverList);
-            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(serverList));
-          }
-        } catch (e) { }
-      }
-      setServerOnline(true);
+      setHistory(saved ? JSON.parse(saved) : []);
     } catch (err) {
-      console.warn('Unable to load history:', err.message);
+      console.warn('Unable to load localStorage history:', err.message);
+      setHistory([]);
     } finally {
       setTimeout(() => setLoadingHistory(false), 150);
     }
