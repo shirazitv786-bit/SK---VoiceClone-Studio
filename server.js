@@ -17,6 +17,7 @@ const voicesDir = path.join(__dirname, 'voices');
 const audioDir = path.join(__dirname, 'audio');
 const tempDir = path.join(__dirname, 'temp');
 const historyFile = path.join(__dirname, 'history.json');
+const registryFile = path.join(__dirname, 'voices_registry.json');
 
 if (!fs.existsSync(voicesDir)) fs.mkdirSync(voicesDir, { recursive: true });
 if (!fs.existsSync(audioDir)) fs.mkdirSync(audioDir, { recursive: true });
@@ -150,12 +151,30 @@ app.get('/api/health', (req, res) => {
 
 /**
  * GET /api/voices
- * Lists all available .wav reference voice files
+ * Lists all available .wav reference voice files and rich registry metadata
  */
 app.get('/api/voices', (req, res) => {
   try {
     const files = fs.readdirSync(voicesDir).filter(file => file.toLowerCase().endsWith('.wav'));
-    res.json({ voices: files });
+    let registry = [];
+    if (fs.existsSync(registryFile)) {
+      try {
+        registry = JSON.parse(fs.readFileSync(registryFile, 'utf8') || '[]');
+      } catch (e) {
+        console.error('Error reading voices_registry.json:', e);
+      }
+    }
+
+    const categories = Array.from(new Set(registry.map(v => v.category).filter(Boolean)));
+    const languages = Array.from(new Set(registry.map(v => v.language).filter(Boolean)));
+
+    res.json({
+      voices: files,
+      registry: registry,
+      totalVoices: registry.length || files.length,
+      categories: categories,
+      languages: languages
+    });
   } catch (error) {
     res.status(500).json({ error: 'Failed to retrieve voice samples.' });
   }
@@ -276,7 +295,8 @@ app.post('/api/clone-voice', (req, res) => {
     speed = -8,
     pitch = -4,
     pause = 0.22,
-    deviceId = 'anonymous'
+    deviceId = 'anonymous',
+    language = null
   } = req.body;
 
   if (!text || !text.trim()) {
@@ -294,6 +314,18 @@ app.post('/api/clone-voice', (req, res) => {
     return res.status(404).json({
       error: `Reference voice sample "${referenceVoice}" not found on server.`
     });
+  }
+
+  // Detect language from registry if not explicitly provided
+  let detectedLang = language || 'en';
+  if (!language && fs.existsSync(registryFile)) {
+    try {
+      const reg = JSON.parse(fs.readFileSync(registryFile, 'utf8') || '[]');
+      const match = reg.find(v => v.filename === referenceVoice || v.name === referenceVoice);
+      if (match && match.languageCode) {
+        detectedLang = match.languageCode;
+      }
+    } catch (e) {}
   }
 
   // Generate unique timestamped output audio filename and destination path
@@ -324,12 +356,12 @@ app.post('/api/clone-voice', (req, res) => {
     runnerScript,
     tempScriptPath,
     absoluteVoicePath,
-    'en',
+    detectedLang,
     targetAudioPath,
     tempOptionsPath
   ];
 
-  console.log(`Executing voice cloning via: ${pythonBin}`);
+  console.log(`Executing voice cloning via: ${pythonBin} [Lang: ${detectedLang}]`);
   console.log(`Target output: ${audioFilename} [Emotion: ${optionsPayload.emotion}, StyleDegree: ${optionsPayload.styleDegree}]`);
 
   // Child process execution options with Coqui license agreement environment variable

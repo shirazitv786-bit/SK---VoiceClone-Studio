@@ -30,6 +30,16 @@ try:
 except ImportError:
     HAS_COQUI = False
 
+# Load Full 120-Voice Studio Registry
+VOICES_REGISTRY = []
+try:
+    reg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "voices_registry.json")
+    if os.path.isfile(reg_path):
+        with open(reg_path, "r", encoding="utf-8") as f:
+            VOICES_REGISTRY = json.load(f)
+except Exception as _e:
+    VOICES_REGISTRY = []
+
 
 # =============================================================================
 # ADAM VOICE SUITE CONFIGURATIONS (High-definition human profiles)
@@ -284,17 +294,64 @@ def compute_acoustic_params(
 def resolve_neural_voice(reference_wav_path: str, language: str = "en") -> tuple:
     """
     Resolves the best matching neural human voice based on the reference voice
-    file name, metadata, or selected language.
+    file name, metadata registry, or selected language.
     Returns (voice_id, voice_bias_dict).
     """
     basename = os.path.basename(reference_wav_path).lower()
 
-    # Check for Adam voice variations first
+    # 1. Exact or partial match from the 120-Voice Studio Registry
+    if VOICES_REGISTRY:
+        # Pass A: exact filename match
+        for item in VOICES_REGISTRY:
+            if item.get("filename", "").lower() == basename:
+                try:
+                    pb = int(str(item.get("pitchBias", "0")).replace("Hz", "").replace("+", "").strip())
+                except: pb = 0
+                try:
+                    rb = int(str(item.get("rateBias", "0")).replace("%", "").replace("+", "").strip())
+                except: rb = 0
+                try:
+                    vb = int(str(item.get("volumeBias", "0")).replace("%", "").replace("+", "").strip())
+                except: vb = 0
+                bias = {
+                    "pitch_bias": pb,
+                    "rate_bias": rb,
+                    "volume_bias": vb,
+                    "label": item.get("name", ""),
+                    "description": item.get("description", ""),
+                    "language": item.get("languageCode", "en")
+                }
+                return item["neuralVoice"], bias
+
+        # Pass B: key phrase match in basename
+        for item in VOICES_REGISTRY:
+            clean_name = item.get("name", "").lower()
+            clean_id = item.get("id", "").lower()
+            if clean_name in basename or clean_id in basename:
+                try:
+                    pb = int(str(item.get("pitchBias", "0")).replace("Hz", "").replace("+", "").strip())
+                except: pb = 0
+                try:
+                    rb = int(str(item.get("rateBias", "0")).replace("%", "").replace("+", "").strip())
+                except: rb = 0
+                try:
+                    vb = int(str(item.get("volumeBias", "0")).replace("%", "").replace("+", "").strip())
+                except: vb = 0
+                bias = {
+                    "pitch_bias": pb,
+                    "rate_bias": rb,
+                    "volume_bias": vb,
+                    "label": item.get("name", ""),
+                    "description": item.get("description", ""),
+                    "language": item.get("languageCode", "en")
+                }
+                return item["neuralVoice"], bias
+
+    # 2. Check for Adam voice variations
     if "adam" in basename:
         for style_key, config in ADAM_PROFILES.items():
             if style_key in basename:
                 return config["voice"], config
-        # Default to flagship Adam Deep Narration
         return ADAM_PROFILES["deep"]["voice"], ADAM_PROFILES["deep"]
 
     for key, voice_id in NEURAL_VOICE_MAP.items():
@@ -682,7 +739,13 @@ def main():
     is_custom_cloning = False
     ref_basename = os.path.basename(reference_wav_path).lower()
     known_presets = ["adam", "jenny", "guy", "aria", "christopher", "sonia", "ryan", "brian", "andrew", "default"]
-    if not any(k in ref_basename for k in known_presets):
+    is_in_registry = any(
+        ref_basename == item.get("filename", "").lower() or
+        item.get("id", "").lower() in ref_basename or
+        item.get("name", "").lower() in ref_basename
+        for item in VOICES_REGISTRY
+    )
+    if not is_in_registry and not any(k in ref_basename for k in known_presets):
         is_custom_cloning = True
 
     if is_custom_cloning and HAS_COQUI:
