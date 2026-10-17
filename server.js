@@ -262,25 +262,6 @@ app.delete('/api/history', (req, res) => {
   }
 });
 
-/**
- * GET /api/emotions
- * Returns available emotion profiles and acoustic modulation metadata
- */
-app.get('/api/emotions', (req, res) => {
-  res.json({
-    emotions: [
-      { id: 'neutral', label: 'Neutral / Balanced', icon: '🌟', description: 'Natural baseline conversational delivery', defaultRate: '+0%', defaultPitch: '+0Hz' },
-      { id: 'cheerful', label: 'Cheerful', icon: '😊', description: 'High energy, smiling tone, bright inflection', defaultRate: '+12%', defaultPitch: '+8Hz' },
-      { id: 'excited', label: 'Excited', icon: '🤩', description: 'Rapid pacing, dynamic pitch shifts', defaultRate: '+22%', defaultPitch: '+14Hz' },
-      { id: 'sad', label: 'Sad', icon: '😢', description: 'Lower energy, slower pacing, subdued delivery', defaultRate: '-18%', defaultPitch: '-8Hz' },
-      { id: 'empathetic', label: 'Empathetic / Friendly', icon: '💖', description: 'Soft, caring, warm tone (great for customer service or podcasts)', defaultRate: '-5%', defaultPitch: '+3Hz' },
-      { id: 'whispering', label: 'Whispering / Soft', icon: '🤫', description: 'Lower volume, breathy, intimate sound', defaultRate: '-8%', defaultPitch: '-4Hz' },
-      { id: 'angry', label: 'Angry', icon: '😠', description: 'Intense, stressed inflection', defaultRate: '+10%', defaultPitch: '+5Hz' },
-      { id: 'terrified', label: 'Terrified', icon: '😨', description: 'Breathless, trembling, high stress inflection', defaultRate: '+15%', defaultPitch: '+10Hz' },
-      { id: 'newscast', label: 'Newscast / Documentary', icon: '🎙️', description: 'Calm, authoritative, formal broadcast tone', defaultRate: '+0%', defaultPitch: '-2Hz' }
-    ]
-  });
-});
 
 /**
  * POST /api/clone-voice
@@ -290,8 +271,6 @@ app.post('/api/clone-voice', (req, res) => {
   const {
     text,
     referenceVoice,
-    emotion = 'neutral',
-    styleDegree = 1.0,
     speed = -8,
     pitch = -4,
     pause = 0.22,
@@ -337,11 +316,9 @@ app.post('/api/clone-voice', (req, res) => {
   const tempScriptPath = path.join(tempDir, `temp_script_${timestamp}_${Math.random().toString(36).substring(7)}.txt`);
   fs.writeFileSync(tempScriptPath, text.trim(), 'utf8');
 
-  // Temporary file for emotion & acoustic modulation options
+  // Temporary file for acoustic modulation options
   const tempOptionsPath = path.join(tempDir, `temp_opts_${timestamp}_${Math.random().toString(36).substring(7)}.json`);
   const optionsPayload = {
-    emotion: emotion || 'neutral',
-    styleDegree: parseFloat(styleDegree) || 1.0,
     speed: (speed !== undefined && speed !== null) ? parseInt(speed) : -8,
     pitch: (pitch !== undefined && pitch !== null) ? parseInt(pitch) : -4,
     pause: parseFloat(pause) || 0.22
@@ -362,7 +339,7 @@ app.post('/api/clone-voice', (req, res) => {
   ];
 
   console.log(`Executing voice cloning via: ${pythonBin} [Lang: ${detectedLang}]`);
-  console.log(`Target output: ${audioFilename} [Emotion: ${optionsPayload.emotion}, StyleDegree: ${optionsPayload.styleDegree}]`);
+  console.log(`Target output: ${audioFilename} [Pace: ${optionsPayload.speed}%, Pitch: ${optionsPayload.pitch}Hz, Pause: ${optionsPayload.pause}s]`);
 
   // Child process execution options with Coqui license agreement environment variable
   const execOptions = {
@@ -418,8 +395,6 @@ app.post('/api/clone-voice', (req, res) => {
       timestamp: new Date().toISOString(),
       text: text.trim().length > 120 ? text.trim().substring(0, 120) + '...' : text.trim(),
       referenceVoice: referenceVoice,
-      emotion: optionsPayload.emotion,
-      styleDegree: optionsPayload.styleDegree,
       audioUrl: audioUrl
     };
 

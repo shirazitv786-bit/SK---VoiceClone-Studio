@@ -137,81 +137,6 @@ LANGUAGE_VOICE_MAP = {
     "ja": "ja-JP-KeitaNeural"
 }
 
-# Emotion & Style Profiles using Acoustic Modulation
-EMOTION_PROFILES = {
-    "neutral": {
-        "rate": 0,
-        "pitch": 0,
-        "volume": 0,
-        "pause": 0.22,
-        "label": "Neutral / Balanced",
-        "description": "Natural baseline conversational delivery"
-    },
-    "cheerful": {
-        "rate": 10,
-        "pitch": 6,
-        "volume": 12,
-        "pause": 0.16,
-        "label": "Cheerful",
-        "description": "High energy, smiling tone, bright inflection"
-    },
-    "excited": {
-        "rate": 18,
-        "pitch": 10,
-        "volume": 18,
-        "pause": 0.12,
-        "label": "Excited",
-        "description": "Rapid pacing, dynamic pitch shifts"
-    },
-    "sad": {
-        "rate": -15,
-        "pitch": -6,
-        "volume": -12,
-        "pause": 0.35,
-        "label": "Sad",
-        "description": "Lower energy, slower pacing, subdued delivery"
-    },
-    "empathetic": {
-        "rate": -4,
-        "pitch": 2,
-        "volume": 0,
-        "pause": 0.24,
-        "label": "Empathetic / Friendly",
-        "description": "Soft, caring, warm tone (great for customer service or podcasts)"
-    },
-    "whispering": {
-        "rate": -8,
-        "pitch": -3,
-        "volume": -30,
-        "pause": 0.28,
-        "label": "Whispering / Soft",
-        "description": "Lower volume, breathy, intimate sound"
-    },
-    "angry": {
-        "rate": 8,
-        "pitch": 4,
-        "volume": 30,
-        "pause": 0.15,
-        "label": "Angry",
-        "description": "Intense, stressed inflection"
-    },
-    "terrified": {
-        "rate": 14,
-        "pitch": 8,
-        "volume": -8,
-        "pause": 0.18,
-        "label": "Terrified",
-        "description": "Breathless, trembling, high stress inflection"
-    },
-    "newscast": {
-        "rate": 0,
-        "pitch": -2,
-        "volume": 8,
-        "pause": 0.22,
-        "label": "Newscast / Documentary",
-        "description": "Calm, authoritative, formal broadcast tone"
-    }
-}
 
 
 def humanize_script_text(text: str) -> str:
@@ -238,8 +163,6 @@ def humanize_script_text(text: str) -> str:
 
 
 def compute_acoustic_params(
-    emotion: str = "neutral",
-    style_degree: float = 1.0,
     user_speed: int = -8,
     user_pitch: int = -4,
     user_pause: float = None,
@@ -247,40 +170,29 @@ def compute_acoustic_params(
 ):
     """
     Computes modulated acoustic speech parameters (rate, pitch, volume, pause)
-    by combining emotion base vectors, voice-specific timbre biases (such as Adam's deep tone),
-    styleDegree intensity multiplier, and user manual sliders.
+    by combining voice-specific timbre biases and user manual sliders.
     """
-    key = emotion.lower().strip() if emotion else "neutral"
-    profile = EMOTION_PROFILES.get(key, EMOTION_PROFILES["neutral"])
-
-    # Scale degree multiplier (0.1 to 3.0)
-    scale = max(0.1, min(float(style_degree), 3.0))
-
     vb_pitch = voice_bias.get("pitch_bias", 0) if voice_bias else 0
     vb_rate = voice_bias.get("rate_bias", 0) if voice_bias else 0
     vb_vol = voice_bias.get("volume_bias", 0) if voice_bias else 0
 
     # Effective rate (-50% to +100%)
-    eff_rate = int(round(profile["rate"] * scale + user_speed + vb_rate))
+    eff_rate = int(round(user_speed + vb_rate))
     eff_rate = max(-50, min(100, eff_rate))
 
     # Effective pitch (-40Hz to +40Hz)
-    eff_pitch = int(round(profile["pitch"] * scale + user_pitch + vb_pitch))
+    eff_pitch = int(round(user_pitch + vb_pitch))
     eff_pitch = max(-40, min(40, eff_pitch))
 
     # Effective volume (-50% to +50%)
-    eff_vol = int(round(profile["volume"] * scale + vb_vol))
+    eff_vol = int(round(vb_vol))
     eff_vol = max(-50, min(50, eff_vol))
 
     # Effective pause duration between sentences (0.05s to 1.2s)
     if user_pause is not None and user_pause > 0:
         eff_pause = float(user_pause)
     else:
-        base_pause = profile["pause"]
-        if base_pause > 0.22:
-            eff_pause = base_pause * (1.0 + (scale - 1.0) * 0.25)
-        else:
-            eff_pause = base_pause * (1.0 - (scale - 1.0) * 0.15)
+        eff_pause = 0.22
 
     eff_pause = max(0.08, min(1.2, eff_pause))
 
@@ -288,7 +200,7 @@ def compute_acoustic_params(
     pitch_str = f"{'+' if eff_pitch >= 0 else ''}{eff_pitch}Hz"
     vol_str = f"{'+' if eff_vol >= 0 else ''}{eff_vol}%"
 
-    return rate_str, pitch_str, vol_str, eff_pause, profile
+    return rate_str, pitch_str, vol_str, eff_pause
 
 
 def resolve_neural_voice(reference_wav_path: str, language: str = "en") -> tuple:
@@ -688,9 +600,7 @@ def main():
     else:
         synthesis_wav_path = output_file_path
 
-    # Parse Emotion and Acoustic Modulation Options (arg 5)
-    emotion = "neutral"
-    style_degree = 1.0
+    # Parse Acoustic Modulation Options (arg 5)
     user_speed = -8
     user_pitch = -4
     user_pause = None
@@ -703,21 +613,17 @@ def main():
                     opts = json.load(f)
             else:
                 opts = json.loads(opts_arg)
-            emotion = opts.get("emotion", "neutral")
-            style_degree = float(opts.get("styleDegree", 1.0))
             user_speed = int(opts.get("speed", -8))
             user_pitch = int(opts.get("pitch", -4))
             if "pause" in opts and opts["pause"] is not None:
                 user_pause = float(opts["pause"])
         except Exception as e:
-            print(f"[NOTICE] Using default emotion settings ({e})")
+            print(f"[NOTICE] Using default modulation settings ({e})")
 
     # Resolve target neural voice & voice bias
     neural_voice_id, voice_bias = resolve_neural_voice(reference_wav_path, language)
 
-    rate_str, pitch_str, vol_str, eff_pause, emotion_profile = compute_acoustic_params(
-        emotion=emotion,
-        style_degree=style_degree,
+    rate_str, pitch_str, vol_str, eff_pause = compute_acoustic_params(
         user_speed=user_speed,
         user_pitch=user_pitch,
         user_pause=user_pause,
@@ -729,7 +635,6 @@ def main():
     print(f"Reference voice: {os.path.basename(reference_wav_path)}")
     if voice_bias and "label" in voice_bias:
         print(f"Profile: {voice_bias['label']}")
-    print(f"Emotion: {emotion_profile['label']} (styledegree={style_degree})")
     print(f"Modulation: Rate={rate_str}, Pitch={pitch_str}, Volume={vol_str}, Pause={eff_pause:.2f}s")
     print(f"Target output: {output_file_path}")
 

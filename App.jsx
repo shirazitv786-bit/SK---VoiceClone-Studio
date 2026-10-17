@@ -104,31 +104,19 @@ export default function App() {
   });
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [searchHistory, setSearchHistory] = useState('');
+  const [playingHistoryId, setPlayingHistoryId] = useState(null);
+  const [downloadingId, setDownloadingId] = useState(null);
   const audioPlayerRef = useRef(null);
 
   // Voice Preview States (Main Bar)
   const [previewingVoice, setPreviewingVoice] = useState(false);
   const previewAudioRef = useRef(null);
 
-  // Emotion & Acoustic Modulation States
-  const [emotion, setEmotion] = useState('neutral');
-  const [styleDegree, setStyleDegree] = useState(1.0);
+  // Acoustic Modulation States
   const [speed, setSpeed] = useState(-8);
   const [pitch, setPitch] = useState(-4);
   const [pause, setPause] = useState(0.22);
   const [showAcousticControls, setShowAcousticControls] = useState(true);
-
-  const EMOTION_OPTIONS = [
-    { id: 'neutral', label: 'Neutral', icon: '🌟', tagline: 'Natural & Balanced' },
-    { id: 'cheerful', label: 'Cheerful', icon: '😊', tagline: 'Smiling & Bright' },
-    { id: 'excited', label: 'Excited', icon: '🤩', tagline: 'Rapid & Dynamic' },
-    { id: 'sad', label: 'Sad', icon: '😢', tagline: 'Subdued & Slower' },
-    { id: 'empathetic', label: 'Empathetic', icon: '💖', tagline: 'Soft, Warm & Caring' },
-    { id: 'whispering', label: 'Whispering', icon: '🤫', tagline: 'Breathy & Intimate' },
-    { id: 'angry', label: 'Angry', icon: '😠', tagline: 'Intense & Stressed' },
-    { id: 'terrified', label: 'Terrified', icon: '😨', tagline: 'Breathless & Trembling' },
-    { id: 'newscast', label: 'Newscast', icon: '🎙️', tagline: 'Authoritative Broadcast' }
-  ];
 
   // Currently Selected Voice Object
   const currentVoiceObj = useMemo(() => {
@@ -205,12 +193,6 @@ export default function App() {
     setShowVoiceLibrary(false);
   };
 
-  // Load Native Sample Script for current voice
-  const handleLoadNativeSample = () => {
-    if (currentVoiceObj && currentVoiceObj.previewText) {
-      setText(currentVoiceObj.previewText);
-    }
-  };
 
   // Check backend health & fetch available voices + registry
   const fetchVoices = async (preferredSelection = null) => {
@@ -246,14 +228,14 @@ export default function App() {
       setHistory(serverHistory);
       try {
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(serverHistory));
-      } catch (e) {}
+      } catch (e) { }
       setServerOnline(true);
     } catch (err) {
       console.warn('Unable to load history from server, using local cache:', err.message);
       try {
         const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
         if (saved) setHistory(JSON.parse(saved));
-      } catch (e) {}
+      } catch (e) { }
     } finally {
       setTimeout(() => setLoadingHistory(false), 150);
     }
@@ -328,8 +310,6 @@ export default function App() {
       const response = await axios.post(`${API_BASE}/api/clone-voice`, {
         text: text.trim(),
         referenceVoice: referenceVoice,
-        emotion: emotion,
-        styleDegree: styleDegree,
         speed: speed,
         pitch: pitch,
         pause: pause,
@@ -347,8 +327,6 @@ export default function App() {
           timestamp: new Date().toISOString(),
           text: text.trim().length > 120 ? text.trim().substring(0, 120) + '...' : text.trim(),
           referenceVoice: referenceVoice,
-          emotion: emotion,
-          styleDegree: styleDegree,
           audioUrl: rawUrl
         };
 
@@ -365,7 +343,7 @@ export default function App() {
         setTimeout(() => {
           if (audioPlayerRef.current) {
             audioPlayerRef.current.currentTime = 0;
-            audioPlayerRef.current.play().catch(() => {});
+            audioPlayerRef.current.play().catch(() => { });
           }
         }, 150);
       } else {
@@ -380,16 +358,72 @@ export default function App() {
     }
   };
 
-  // Quick Play handler for past history records
-  const handleQuickPlay = (historyAudioUrl) => {
-    const fullUrl = historyAudioUrl.startsWith('http') ? historyAudioUrl : `${API_BASE}${historyAudioUrl}`;
+  // Quick Play / Pause handler for past history records
+  const handleQuickPlay = (itemOrUrl, e) => {
+    if (e) e.stopPropagation();
+    const audioPath = typeof itemOrUrl === 'string' ? itemOrUrl : itemOrUrl.audioUrl;
+    const itemId = typeof itemOrUrl === 'object' && itemOrUrl ? itemOrUrl.id : null;
+    const fullUrl = audioPath.startsWith('http') ? audioPath : `${API_BASE}${audioPath}`;
+
+    // If already playing this item, clicking toggles pause
+    if (itemId && playingHistoryId === itemId && audioPlayerRef.current && !audioPlayerRef.current.paused) {
+      audioPlayerRef.current.pause();
+      setPlayingHistoryId(null);
+      return;
+    }
+
     setAudioUrl(fullUrl);
+    if (itemId) setPlayingHistoryId(itemId);
+
     setTimeout(() => {
       if (audioPlayerRef.current) {
         audioPlayerRef.current.currentTime = 0;
-        audioPlayerRef.current.play().catch(() => {});
+        audioPlayerRef.current
+          .play()
+          .then(() => {
+            if (itemId) setPlayingHistoryId(itemId);
+          })
+          .catch((err) => {
+            console.warn('Playback error:', err);
+            setPlayingHistoryId(null);
+          });
       }
-    }, 100);
+    }, 120);
+  };
+
+  // Direct Audio Download Helper (Cross-origin safe with direct MP3 blob download)
+  const handleDownloadAudio = async (audioPath, voiceName = 'voice', itemId = null, e = null) => {
+    if (e) e.stopPropagation();
+    if (!audioPath) return;
+
+    if (itemId) setDownloadingId(itemId);
+    try {
+      const fullUrl = audioPath.startsWith('http') ? audioPath : `${API_BASE}${audioPath}`;
+      const res = await fetch(fullUrl);
+      if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const safeVoice = (voiceName || 'voice').replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 32);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = `${safeVoice}_${Date.now()}.mp3`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 3000);
+    } catch (err) {
+      console.warn('Direct blob download fallback:', err);
+      const fullUrl = audioPath.startsWith('http') ? audioPath : `${API_BASE}${audioPath}`;
+      const a = document.createElement('a');
+      a.href = fullUrl;
+      a.download = `audio_${Date.now()}.mp3`;
+      a.target = '_blank';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } finally {
+      if (itemId) setTimeout(() => setDownloadingId(null), 600);
+    }
   };
 
   // Storage cleanup handler - Clears history on THIS device only
@@ -402,6 +436,7 @@ export default function App() {
       localStorage.removeItem(LOCAL_STORAGE_KEY);
       setHistory([]);
       setAudioUrl(null);
+      setPlayingHistoryId(null);
       await axios.delete(`${API_BASE}/api/history`, {
         params: { deviceId: devId }
       });
@@ -413,6 +448,10 @@ export default function App() {
   // Delete an individual history item from THIS device
   const handleDeleteHistoryItem = async (itemId, e) => {
     if (e) e.stopPropagation();
+    if (playingHistoryId === itemId) {
+      if (audioPlayerRef.current) audioPlayerRef.current.pause();
+      setPlayingHistoryId(null);
+    }
     const devId = getDeviceId();
     setHistory((prevHistory) => {
       const updated = prevHistory.filter((item) => item.id !== itemId);
@@ -496,10 +535,11 @@ export default function App() {
       ? 'bg-white hover:bg-zinc-200 text-black shadow-md shadow-white/5 active:scale-[0.99]'
       : 'bg-black hover:bg-zinc-800 text-white shadow-md shadow-black/15 active:scale-[0.99]',
     btnSecondary: isDarkMode
-      ? 'bg-zinc-900 hover:bg-zinc-800 text-zinc-100 border border-zinc-700/80'
-      : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-900 border border-zinc-300'
+      ? 'bg-zinc-900 hover:bg-zinc-800 text-zinc-100 border border-zinc-700/80 shadow-sm shadow-zinc-900/50 active:scale-[0.99]'
+      : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-900 border border-zinc-300 shadow-sm shadow-zinc-300/60 active:scale-[0.99]'
   };
 
+  const charCount = text.length;
   const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
   const estimatedSeconds = Math.ceil(wordCount / 2.5);
 
@@ -529,9 +569,8 @@ export default function App() {
       <nav className={`sticky top-0 z-30 border-b backdrop-blur-md px-4 sm:px-6 py-3.5 flex items-center justify-between ${theme.headerBg}`}>
         <div className="flex items-center gap-3">
           <div
-            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 transition-all ${
-              isDarkMode ? 'bg-white text-black shadow-md shadow-white/5' : 'bg-black text-white shadow-md shadow-black/10'
-            }`}
+            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 transition-all ${isDarkMode ? 'bg-white text-black shadow-md shadow-white/5' : 'bg-black text-white shadow-md shadow-black/10'
+              }`}
           >
             <svg width="20" height="20" className="w-5 h-5 fill-none stroke-current" viewBox="0 0 24 24">
               <path
@@ -545,11 +584,6 @@ export default function App() {
           <div>
             <h1 className="text-base sm:text-lg font-bold tracking-tight leading-none flex items-center gap-2">
               SK - VoiceClone Studio
-              <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${
-                isDarkMode ? 'bg-zinc-800 text-zinc-300 border-zinc-700' : 'bg-zinc-200 text-zinc-900 border-zinc-300'
-              }`}>
-                120 Human Models
-              </span>
             </h1>
             <p className={`text-xs ${theme.textMuted} mt-0.5 hidden sm:block font-medium`}>
               ElevenLabs-Style Multilingual Neural Suite • 100% Studio Quality
@@ -559,22 +593,7 @@ export default function App() {
 
         {/* Action Controls */}
         <div className="flex items-center gap-2 sm:gap-3">
-          {/* Browse 120 Voices Library Button */}
-          <button
-            type="button"
-            onClick={() => setShowVoiceLibrary(true)}
-            className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shadow-sm ${
-              isDarkMode
-                ? 'bg-gradient-to-r from-zinc-800 to-zinc-700 hover:from-zinc-700 hover:to-zinc-600 text-white border border-zinc-600'
-                : 'bg-zinc-900 hover:bg-black text-white border border-zinc-800'
-            }`}
-          >
-            <span className="text-sm">🎙️</span>
-            <span>Browse 120 Voices</span>
-            <span className="hidden sm:inline-block ml-1 px-1.5 py-0.2 bg-white/20 rounded text-[10px] font-mono">
-              Library
-            </span>
-          </button>
+
 
           {/* Server Connection Pill */}
           {serverOnline === false ? (
@@ -587,9 +606,8 @@ export default function App() {
             </div>
           ) : (
             <div
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border ${
-                isDarkMode ? 'bg-zinc-900 text-zinc-300 border-zinc-800' : 'bg-zinc-100 text-zinc-800 border-zinc-200'
-              }`}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border ${isDarkMode ? 'bg-zinc-900 text-zinc-300 border-zinc-800' : 'bg-zinc-100 text-zinc-800 border-zinc-200'
+                }`}
             >
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
               <span className="hidden md:inline">120 Voices Ready</span>
@@ -600,11 +618,10 @@ export default function App() {
           {/* Theme Toggle Button */}
           <button
             onClick={() => setIsDarkMode(!isDarkMode)}
-            className={`p-2 rounded-xl border transition-all ${
-              isDarkMode
-                ? 'border-zinc-800 bg-zinc-900 text-zinc-200 hover:bg-zinc-800'
-                : 'border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-100 shadow-sm'
-            }`}
+            className={`p-2 rounded-xl border transition-all ${isDarkMode
+              ? 'border-zinc-800 bg-zinc-900 text-zinc-200 hover:bg-zinc-800'
+              : 'border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-100 shadow-sm'
+              }`}
             title="Toggle Dark / Light Theme"
           >
             {isDarkMode ? (
@@ -648,23 +665,19 @@ export default function App() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z" />
                   </svg>
                   Target Reference Voice Model
-                  <span className={`text-[11px] font-mono font-medium px-2 py-0.5 rounded-full ${
-                    isDarkMode ? 'bg-zinc-800 text-zinc-300' : 'bg-zinc-200 text-zinc-800'
-                  }`}>
-                    {voiceRegistry.length || availableVoices.length} Available
-                  </span>
+
                 </label>
                 <p className={`text-xs ${theme.textMuted} mt-0.5`}>
                   Select from 120 unique human models across English, Urdu, Hindi, Arabic, Chinese & more.
                 </p>
               </div>
 
-              <div className="flex items-center gap-2 self-start sm:self-center">
+              <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
                 {/* Voice Library Explorer Button */}
                 <button
                   type="button"
                   onClick={() => setShowVoiceLibrary(true)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border ${theme.btnSecondary}`}
+                  className={`inline-flex items-center justify-center gap-1.5 px-3 h-8 rounded-xl text-xs font-semibold whitespace-nowrap shrink-0 transition-all border ${theme.btnSecondary}`}
                   title="Open visual Voice Library with search, filter tabs, and audio cards"
                 >
                   <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -677,7 +690,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setShowUploadModal(!showUploadModal)}
-                  className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${theme.btnPrimary}`}
+                  className={`inline-flex items-center justify-center gap-1 px-3 h-8 rounded-xl text-xs font-bold whitespace-nowrap shrink-0 transition-all ${theme.btnPrimary}`}
                 >
                   <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
@@ -711,11 +724,10 @@ export default function App() {
                       setUploadFeedback(null);
                     }}
                     disabled={uploading}
-                    className={`text-xs file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold cursor-pointer flex-1 ${
-                      isDarkMode
-                        ? 'file:bg-zinc-800 file:text-zinc-100 hover:file:bg-zinc-700 text-zinc-300'
-                        : 'file:bg-zinc-200 file:text-zinc-900 hover:file:bg-zinc-300 text-zinc-700'
-                    }`}
+                    className={`text-xs file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold cursor-pointer flex-1 ${isDarkMode
+                      ? 'file:bg-zinc-800 file:text-zinc-100 hover:file:bg-zinc-700 text-zinc-300'
+                      : 'file:bg-zinc-200 file:text-zinc-900 hover:file:bg-zinc-300 text-zinc-700'
+                      }`}
                   />
                   <button
                     type="submit"
@@ -738,13 +750,12 @@ export default function App() {
 
                 {uploadFeedback && (
                   <div
-                    className={`mt-2.5 text-xs p-2.5 rounded-lg border ${
-                      uploadFeedback.type === 'success'
-                        ? isDarkMode
-                          ? 'bg-zinc-900 border-zinc-700 text-zinc-200'
-                          : 'bg-zinc-100 border-zinc-300 text-zinc-900'
-                        : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
-                    }`}
+                    className={`mt-2.5 text-xs p-2.5 rounded-lg border ${uploadFeedback.type === 'success'
+                      ? isDarkMode
+                        ? 'bg-zinc-900 border-zinc-700 text-zinc-200'
+                        : 'bg-zinc-100 border-zinc-300 text-zinc-900'
+                      : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                      }`}
                   >
                     {uploadFeedback.text}
                   </div>
@@ -794,7 +805,9 @@ export default function App() {
                 type="button"
                 onClick={handlePreviewVoice}
                 disabled={loading || !referenceVoice}
-                className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-semibold text-xs transition-all shrink-0 active:scale-95 disabled:opacity-50 ${theme.btnSecondary}`}
+                className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-semibold text-xs transition-all shrink-0 active:scale-95 disabled:opacity-50 shadow-sm ${
+                  isDarkMode ? 'shadow-zinc-800/60' : 'shadow-zinc-400/30'
+                } ${theme.btnSecondary}`}
                 title="Listen to high-definition reference sample of this voice"
               >
                 {previewingVoice ? (
@@ -816,51 +829,7 @@ export default function App() {
               </button>
             </div>
 
-            {/* Selected Voice Profile Summary Card */}
-            {currentVoiceObj && (
-              <div className={`p-3.5 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs ${theme.panelBg}`}>
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-base">
-                      {LANGUAGE_META[currentVoiceObj.language]?.flag || '🌐'}
-                    </span>
-                    <span className="font-bold text-zinc-100 dark:text-zinc-100">
-                      {currentVoiceObj.name}
-                    </span>
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
-                      isDarkMode ? 'bg-zinc-800 text-zinc-300 border-zinc-700' : 'bg-zinc-200 text-zinc-800 border-zinc-300'
-                    }`}>
-                      {currentVoiceObj.language}
-                    </span>
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                      currentVoiceObj.gender === 'Female' ? 'bg-fuchsia-500/20 text-fuchsia-300' : 'bg-blue-500/20 text-blue-300'
-                    }`}>
-                      {currentVoiceObj.gender}
-                    </span>
-                  </div>
-                  <p className={`${theme.textMuted} text-[11px] leading-relaxed`}>
-                    {currentVoiceObj.description}
-                  </p>
-                </div>
 
-                {/* Instant Action: Load Native Sample Script */}
-                {currentVoiceObj.previewText && (
-                  <button
-                    type="button"
-                    onClick={handleLoadNativeSample}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 border self-start sm:self-center flex items-center gap-1.5 ${
-                      isDarkMode
-                        ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border-zinc-700'
-                        : 'bg-white hover:bg-zinc-100 text-zinc-900 border-zinc-300 shadow-sm'
-                    }`}
-                    title="Populates the script box with an authentic native sentence for this voice"
-                  >
-                    <span>✍️</span>
-                    <span>Load Native Sample Script</span>
-                  </button>
-                )}
-              </div>
-            )}
           </div>
 
           {/* Human Tone, Pitch & Delivery Studio Panel */}
@@ -870,13 +839,7 @@ export default function App() {
                 <div>
                   <h3 className="text-sm font-bold tracking-wide flex items-center gap-2">
                     Human Tone, Pitch & Delivery Studio
-                    <span
-                      className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-                        isDarkMode ? 'bg-zinc-800 text-zinc-300 border-zinc-700' : 'bg-zinc-200 text-zinc-800 border-zinc-300'
-                      }`}
-                    >
-                      Ultra-Human Pacing
-                    </span>
+
                   </h3>
                   <p className={`text-xs ${theme.textMuted}`}>
                     Modulate vocal baritone depth, cadence, and human breath pauses.
@@ -891,26 +854,22 @@ export default function App() {
                     setPitch(-4);
                     setSpeed(-8);
                     setPause(0.22);
-                    setStyleDegree(1.0);
-                    setEmotion('neutral');
                   }}
-                  className={`text-xs font-medium px-2.5 py-1 rounded-lg border transition-all ${
-                    isDarkMode
-                      ? 'text-zinc-400 hover:text-zinc-100 border-zinc-800 hover:bg-zinc-800'
-                      : 'text-zinc-600 hover:text-zinc-900 border-zinc-300 hover:bg-zinc-100'
-                  }`}
-                  title="Reset Pitch to -4Hz, Pace to -8%, Pause to 0.22s, and Style to 1.0x"
+                  className={`text-xs font-medium px-2.5 py-1 rounded-lg border transition-all ${isDarkMode
+                    ? 'text-zinc-400 hover:text-zinc-100 border-zinc-800 hover:bg-zinc-800'
+                    : 'text-zinc-600 hover:text-zinc-900 border-zinc-300 hover:bg-zinc-100'
+                    }`}
+                  title="Reset Pitch to -4Hz, Pace to -8%, and Pause to 0.22s"
                 >
                   Reset Defaults
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowAcousticControls(!showAcousticControls)}
-                  className={`text-xs font-semibold px-2.5 py-1 rounded-lg transition-all border ${
-                    isDarkMode
-                      ? 'text-zinc-200 bg-zinc-800/80 hover:bg-zinc-700 border-zinc-700'
-                      : 'text-zinc-800 bg-zinc-100 hover:bg-zinc-200 border-zinc-300'
-                  }`}
+                  className={`text-xs font-semibold px-2.5 py-1 rounded-lg transition-all border ${isDarkMode
+                    ? 'text-zinc-200 bg-zinc-800/80 hover:bg-zinc-700 border-zinc-700'
+                    : 'text-zinc-800 bg-zinc-100 hover:bg-zinc-200 border-zinc-300'
+                    }`}
                 >
                   {showAcousticControls ? 'Hide Sliders' : 'Fine-Tune Sliders'}
                 </button>
@@ -937,15 +896,14 @@ export default function App() {
                         <button
                           type="button"
                           onClick={() => setPitch(-4)}
-                          className={`text-[10px] px-2 py-0.5 rounded font-semibold transition-all border ${
-                            pitch === -4
-                              ? isDarkMode
-                                ? 'bg-white text-black border-white'
-                                : 'bg-black text-white border-black'
-                              : isDarkMode
+                          className={`text-[10px] px-2 py-0.5 rounded font-semibold transition-all border ${pitch === -4
+                            ? isDarkMode
+                              ? 'bg-white text-black border-white'
+                              : 'bg-black text-white border-black'
+                            : isDarkMode
                               ? 'bg-zinc-900 text-zinc-300 border-zinc-800 hover:bg-zinc-800'
                               : 'bg-zinc-100 text-zinc-700 border-zinc-200 hover:bg-zinc-200'
-                          }`}
+                            }`}
                           title="Deep Baritone (Signature Adam Narrator)"
                         >
                           Deep Baritone (-4Hz)
@@ -953,30 +911,28 @@ export default function App() {
                         <button
                           type="button"
                           onClick={() => setPitch(0)}
-                          className={`text-[10px] px-2 py-0.5 rounded font-semibold transition-all border ${
-                            pitch === 0
-                              ? isDarkMode
-                                ? 'bg-white text-black border-white'
-                                : 'bg-black text-white border-black'
-                              : isDarkMode
+                          className={`text-[10px] px-2 py-0.5 rounded font-semibold transition-all border ${pitch === 0
+                            ? isDarkMode
+                              ? 'bg-white text-black border-white'
+                              : 'bg-black text-white border-black'
+                            : isDarkMode
                               ? 'bg-zinc-900 text-zinc-300 border-zinc-800 hover:bg-zinc-800'
                               : 'bg-zinc-100 text-zinc-700 border-zinc-200 hover:bg-zinc-200'
-                          }`}
+                            }`}
                         >
                           Natural (0)
                         </button>
                         <button
                           type="button"
                           onClick={() => setPitch(3)}
-                          className={`text-[10px] px-2 py-0.5 rounded font-semibold transition-all border ${
-                            pitch === 3
-                              ? isDarkMode
-                                ? 'bg-white text-black border-white'
-                                : 'bg-black text-white border-black'
-                              : isDarkMode
+                          className={`text-[10px] px-2 py-0.5 rounded font-semibold transition-all border ${pitch === 3
+                            ? isDarkMode
+                              ? 'bg-white text-black border-white'
+                              : 'bg-black text-white border-black'
+                            : isDarkMode
                               ? 'bg-zinc-900 text-zinc-300 border-zinc-800 hover:bg-zinc-800'
                               : 'bg-zinc-100 text-zinc-700 border-zinc-200 hover:bg-zinc-200'
-                          }`}
+                            }`}
                           title="Bright / Higher Tone"
                         >
                           Crisp High (+3Hz)
@@ -991,9 +947,8 @@ export default function App() {
                     step="1"
                     value={pitch}
                     onChange={(e) => setPitch(parseInt(e.target.value))}
-                    className={`w-full cursor-pointer h-1.5 rounded-lg ${
-                      isDarkMode ? 'accent-white bg-zinc-800' : 'accent-black bg-zinc-300'
-                    }`}
+                    className={`w-full cursor-pointer h-1.5 rounded-lg ${isDarkMode ? 'accent-white bg-zinc-800' : 'accent-black bg-zinc-300'
+                      }`}
                   />
                   <div className={`flex justify-between text-[10px] ${theme.textMuted} mt-1`}>
                     <span>Deep Resonant Baritone (-15Hz)</span>
@@ -1002,7 +957,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-3 border-t border-inherit">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-inherit">
                   {/* Speed / Cadence Slider */}
                   <div>
                     <div className="flex justify-between items-center text-xs mb-1">
@@ -1018,9 +973,8 @@ export default function App() {
                       step="2"
                       value={speed}
                       onChange={(e) => setSpeed(parseInt(e.target.value))}
-                      className={`w-full cursor-pointer h-1.5 rounded-lg ${
-                        isDarkMode ? 'accent-white bg-zinc-800' : 'accent-black bg-zinc-300'
-                      }`}
+                      className={`w-full cursor-pointer h-1.5 rounded-lg ${isDarkMode ? 'accent-white bg-zinc-800' : 'accent-black bg-zinc-300'
+                        }`}
                     />
                     <div className={`flex justify-between text-[10px] ${theme.textMuted} mt-0.5`}>
                       <span>Slow (-30%)</span>
@@ -1044,40 +998,13 @@ export default function App() {
                       step="0.02"
                       value={pause}
                       onChange={(e) => setPause(parseFloat(e.target.value))}
-                      className={`w-full cursor-pointer h-1.5 rounded-lg ${
-                        isDarkMode ? 'accent-white bg-zinc-800' : 'accent-black bg-zinc-300'
-                      }`}
+                      className={`w-full cursor-pointer h-1.5 rounded-lg ${isDarkMode ? 'accent-white bg-zinc-800' : 'accent-black bg-zinc-300'
+                        }`}
                     />
                     <div className={`flex justify-between text-[10px] ${theme.textMuted} mt-0.5`}>
                       <span>Snappy (0.08s)</span>
                       <span className={`font-semibold ${isDarkMode ? 'text-zinc-200' : 'text-zinc-800'}`}>Natural (0.22s)</span>
                       <span>Dramatic (0.60s)</span>
-                    </div>
-                  </div>
-
-                  {/* Emotion Style Intensity */}
-                  <div>
-                    <div className="flex justify-between items-center text-xs mb-1">
-                      <span className="font-semibold">Style Intensity</span>
-                      <span className={`font-mono text-xs font-bold ${isDarkMode ? 'text-white' : 'text-black'}`}>
-                        {styleDegree.toFixed(1)}x
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0.2"
-                      max="2.5"
-                      step="0.1"
-                      value={styleDegree}
-                      onChange={(e) => setStyleDegree(parseFloat(e.target.value))}
-                      className={`w-full cursor-pointer h-1.5 rounded-lg ${
-                        isDarkMode ? 'accent-white bg-zinc-800' : 'accent-black bg-zinc-300'
-                      }`}
-                    />
-                    <div className={`flex justify-between text-[10px] ${theme.textMuted} mt-0.5`}>
-                      <span>Subtle (0.2x)</span>
-                      <span className={`font-semibold ${isDarkMode ? 'text-zinc-200' : 'text-zinc-800'}`}>Standard (1.0x)</span>
-                      <span>Expressive (2.5x)</span>
                     </div>
                   </div>
                 </div>
@@ -1104,55 +1031,50 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setText("Deep within the silent ocean trenches lies an untouched realm of darkness and wonder, older than the continents themselves.")}
-                  className={`text-[11px] px-2.5 py-1 rounded-md border font-medium transition-all ${
-                    isDarkMode
-                      ? 'border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white'
-                      : 'border-zinc-300 bg-zinc-100 hover:bg-zinc-200 text-zinc-800'
-                  }`}
+                  className={`text-[11px] px-2.5 py-1 rounded-md border font-medium transition-all ${isDarkMode
+                    ? 'border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white'
+                    : 'border-zinc-300 bg-zinc-100 hover:bg-zinc-200 text-zinc-800'
+                    }`}
                 >
                   English Documentary
                 </button>
                 <button
                   type="button"
                   onClick={() => setText("السلام علیکم۔ زندگی کا ہر نیا دن امید، حوصلے اور خوابوں کو تعبیر دینے کا ایک شاندار موقع ہے۔")}
-                  className={`text-[11px] px-2.5 py-1 rounded-md border font-medium transition-all ${
-                    isDarkMode
-                      ? 'border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white'
-                      : 'border-zinc-300 bg-zinc-100 hover:bg-zinc-200 text-zinc-800'
-                  }`}
+                  className={`text-[11px] px-2.5 py-1 rounded-md border font-medium transition-all shadow-sm active:scale-95 ${isDarkMode
+                    ? 'border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white shadow-zinc-900/50'
+                    : 'border-zinc-300 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 shadow-zinc-300/50'
+                    }`}
                 >
                   Urdu اردو
                 </button>
                 <button
                   type="button"
                   onClick={() => setText("नमस्ते। सफलता का रहस्य निरंतर प्रयास, अटूट विश्वास और सकारात्मक सोच में छिपा है।")}
-                  className={`text-[11px] px-2.5 py-1 rounded-md border font-medium transition-all ${
-                    isDarkMode
-                      ? 'border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white'
-                      : 'border-zinc-300 bg-zinc-100 hover:bg-zinc-200 text-zinc-800'
-                  }`}
+                  className={`text-[11px] px-2.5 py-1 rounded-md border font-medium transition-all shadow-sm active:scale-95 ${isDarkMode
+                    ? 'border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white shadow-zinc-900/50'
+                    : 'border-zinc-300 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 shadow-zinc-300/50'
+                    }`}
                 >
                   Hindi हिन्दी
                 </button>
                 <button
                   type="button"
                   onClick={() => setText("مرحباً بكم. المستقبل يُبنى بالإرادة الصادقة والعمل الدؤوب، متطلعين دائماً نحو القمة.")}
-                  className={`text-[11px] px-2.5 py-1 rounded-md border font-medium transition-all ${
-                    isDarkMode
-                      ? 'border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white'
-                      : 'border-zinc-300 bg-zinc-100 hover:bg-zinc-200 text-zinc-800'
-                  }`}
+                  className={`text-[11px] px-2.5 py-1 rounded-md border font-medium transition-all shadow-sm active:scale-95 ${isDarkMode
+                    ? 'border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white shadow-zinc-900/50'
+                    : 'border-zinc-300 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 shadow-zinc-300/50'
+                    }`}
                 >
                   Arabic العربية
                 </button>
                 <button
                   type="button"
                   onClick={() => setText("大家好。无论前方的道路多么漫长，只要心中怀揣梦想，就一定能迎来光明。")}
-                  className={`text-[11px] px-2.5 py-1 rounded-md border font-medium transition-all ${
-                    isDarkMode
-                      ? 'border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white'
-                      : 'border-zinc-300 bg-zinc-100 hover:bg-zinc-200 text-zinc-800'
-                  }`}
+                  className={`text-[11px] px-2.5 py-1 rounded-md border font-medium transition-all shadow-sm active:scale-95 ${isDarkMode
+                    ? 'border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white shadow-zinc-900/50'
+                    : 'border-zinc-300 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 shadow-zinc-300/50'
+                    }`}
                 >
                   Chinese 中文
                 </button>
@@ -1180,74 +1102,51 @@ export default function App() {
                 disabled={loading}
                 className={`w-full rounded-xl border p-4 text-sm focus:outline-none transition-all resize-y leading-relaxed font-normal ${theme.inputBg}`}
               />
-              <div className={`absolute bottom-3 right-3 text-xs ${theme.textMuted} flex items-center gap-3 bg-inherit px-2 py-0.5 rounded-md`}>
-                <span>{wordCount} words</span>
-                <span>•</span>
+              <div className={`absolute bottom-2.5 sm:bottom-3 right-3 text-[10px] sm:text-xs flex items-center gap-1.5 sm:gap-2 pointer-events-none select-none flex-wrap ${
+                isDarkMode ? 'text-zinc-400' : 'text-zinc-500'
+              }`}>
+                <span className={`font-semibold ${isDarkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>
+                  {charCount.toLocaleString()} chars
+                </span>
+                <span className="opacity-40">•</span>
+                <span className={`font-semibold ${isDarkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>
+                  {wordCount.toLocaleString()} words
+                </span>
+                <span className="opacity-40">•</span>
                 <span>~{estimatedSeconds}s audio</span>
               </div>
             </div>
 
-            {/* Emotion Tone Selector Pills */}
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-xs font-semibold tracking-wide">
-                  Emotional Expression
-                </span>
-                <span className={`text-[11px] ${theme.textMuted}`}>
-                  Modulates acoustic pitch, rate, and vocal intensity
-                </span>
-              </div>
-              <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-9 gap-1.5">
-                {EMOTION_OPTIONS.map((item) => {
-                  const isSelected = emotion === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => setEmotion(item.id)}
-                      className={`p-2 rounded-xl text-center border transition-all flex flex-col items-center justify-center gap-1 ${
-                        isSelected
-                          ? isDarkMode
-                            ? 'bg-white text-black border-white shadow-md'
-                            : 'bg-black text-white border-black shadow-md'
-                          : isDarkMode
-                          ? 'bg-zinc-900/60 text-zinc-300 border-zinc-800 hover:bg-zinc-800/80 hover:text-white'
-                          : 'bg-zinc-100 text-zinc-700 border-zinc-200 hover:bg-zinc-200/80'
-                      }`}
-                      title={item.tagline}
-                    >
-                      <span className="text-base">{item.icon}</span>
-                      <span className="text-[10px] font-bold tracking-tight leading-tight">
-                        {item.label}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+
 
             {/* Synthesize Submit Button */}
-            <div className="pt-2">
+            <div className="pt-2 w-full">
               <button
                 type="button"
                 onClick={handleGenerateSubmit}
                 disabled={loading || !text.trim() || !referenceVoice}
-                className={`w-full py-4 rounded-xl text-sm font-bold tracking-wide transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed ${theme.btnPrimary}`}
+                className={`w-full py-3.5 sm:py-4 px-4 sm:px-6 rounded-2xl text-xs sm:text-sm md:text-base font-bold tracking-wide transition-all duration-200 flex items-center justify-center text-center gap-2.5 sm:gap-3 cursor-pointer disabled:cursor-not-allowed active:scale-[0.99] ${
+                  isDarkMode
+                    ? 'bg-white hover:bg-zinc-100 text-black shadow-lg shadow-zinc-600/40 hover:shadow-xl hover:shadow-zinc-500/50 border border-zinc-200/20'
+                    : 'bg-black hover:bg-zinc-900 text-white shadow-lg shadow-zinc-500/40 hover:shadow-xl hover:shadow-zinc-600/50 border border-black'
+                } ${loading || !text.trim() || !referenceVoice ? 'opacity-60' : 'opacity-100'}`}
               >
                 {loading ? (
                   <>
-                    <svg width="18" height="18" className="animate-spin h-4 w-4 fill-current" fill="none" viewBox="0 0 24 24">
+                    <svg width="18" height="18" className="animate-spin h-4 w-4 fill-current shrink-0" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    <span>Synthesizing Ultra-Human Audio...</span>
+                    <span className="truncate">Synthesizing Ultra-Human Audio...</span>
                   </>
                 ) : (
                   <>
-                    <svg width="18" height="18" className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                    <svg width="18" height="18" className="w-4 h-4 sm:w-5 sm:h-5 fill-current shrink-0" viewBox="0 0 24 24">
                       <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z" />
                     </svg>
-                    <span>Synthesize Voice With {currentVoiceObj?.name || referenceVoice}</span>
+                    <span className="truncate max-w-[240px] xs:max-w-[320px] sm:max-w-none">
+                      Synthesize Voice With {currentVoiceObj?.name || referenceVoice}
+                    </span>
                   </>
                 )}
               </button>
@@ -1264,18 +1163,24 @@ export default function App() {
                     Mastered Output Audio Ready
                   </h3>
                 </div>
-                <a
-                  href={audioUrl}
-                  download={`voice_synthesis_${Date.now()}.mp3`}
-                  className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all ${theme.btnSecondary}`}
+                <button
+                  type="button"
+                  onClick={() => handleDownloadAudio(audioUrl, referenceVoice)}
+                  className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all inline-flex items-center gap-1.5 ${theme.btnSecondary}`}
+                  title="Download broadcast MP3"
                 >
-                  Download Broadcast MP3
-                </a>
+                  <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  <span>Download Broadcast MP3</span>
+                </button>
               </div>
               <audio
                 ref={audioPlayerRef}
                 src={audioUrl}
                 controls
+                onEnded={() => setPlayingHistoryId(null)}
+                onPause={() => setPlayingHistoryId(null)}
                 className="w-full focus:outline-none"
               />
             </div>
@@ -1291,9 +1196,8 @@ export default function App() {
                 <h3 className="text-sm font-bold tracking-wide">
                   Recent Generations
                 </h3>
-                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                  isDarkMode ? 'bg-zinc-800 text-zinc-300' : 'bg-zinc-200 text-zinc-800'
-                }`}>
+                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-zinc-800 text-zinc-300' : 'bg-zinc-200 text-zinc-800'
+                  }`}>
                   {history.length}
                 </span>
               </div>
@@ -1331,47 +1235,124 @@ export default function App() {
                   No past generations yet. Type your script and click Synthesize to create your first clip.
                 </div>
               ) : (
-                filteredHistory.map((item) => (
-                  <div
-                    key={item.id}
-                    onClick={() => handleQuickPlay(item.audioUrl)}
-                    className={`p-3 rounded-xl border cursor-pointer transition-all hover:scale-[1.01] flex flex-col gap-2 ${
-                      isDarkMode
-                        ? 'bg-zinc-900/40 hover:bg-zinc-900 border-zinc-800/80 hover:border-zinc-700'
-                        : 'bg-zinc-50 hover:bg-zinc-100 border-zinc-200'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="text-xs font-semibold truncate flex-1">
-                        {item.referenceVoice.replace('.wav', '')}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={(e) => handleDeleteHistoryItem(item.id, e)}
-                        className={`text-zinc-500 hover:text-rose-400 p-0.5 rounded transition-colors`}
-                        title="Delete this record"
-                      >
-                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
+                filteredHistory.map((item) => {
+                  const isPlayingThis = playingHistoryId === item.id;
+                  const isDownloadingThis = downloadingId === item.id;
 
-                    <p className={`text-xs ${theme.textMuted} line-clamp-2 leading-relaxed`}>
-                      "{item.text}"
-                    </p>
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => handleQuickPlay(item)}
+                      className={`p-3.5 rounded-xl border cursor-pointer transition-all hover:scale-[1.01] flex flex-col gap-2.5 ${isPlayingThis
+                        ? isDarkMode
+                          ? 'bg-zinc-900 border-emerald-500/60 ring-1 ring-emerald-500/40 shadow-lg'
+                          : 'bg-emerald-50/70 border-emerald-500/60 ring-1 ring-emerald-500/30 shadow-sm'
+                        : isDarkMode
+                          ? 'bg-zinc-900/40 hover:bg-zinc-900 border-zinc-800/80 hover:border-zinc-700'
+                          : 'bg-zinc-50 hover:bg-zinc-100 border-zinc-200'
+                        }`}
+                    >
+                      {/* Top Header: Voice Name & Timestamp */}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                          {isPlayingThis && (
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping shrink-0" />
+                          )}
+                          <span className="text-xs font-bold truncate text-inherit">
+                            {item.referenceVoice.replace('.wav', '')}
+                          </span>
+                        </div>
+                        <span className={`text-[10px] font-mono shrink-0 ${theme.textMuted}`}>
+                          {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
 
-                    <div className="flex items-center justify-between text-[10px] text-zinc-500 pt-1 border-t border-inherit/40">
-                      <span>{new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                      <span className="flex items-center gap-1 font-semibold text-zinc-400 hover:text-zinc-200">
-                        <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M8 5v14l11-7z" />
-                        </svg>
-                        Play Audio
-                      </span>
+                      {/* Script Excerpt */}
+                      <p className={`text-xs ${theme.textMuted} line-clamp-2 leading-relaxed italic`}>
+                        "{item.text}"
+                      </p>
+
+                      {/* Action Buttons Toolbar: Play, Download, Delete */}
+                      <div className="grid grid-cols-3 gap-1.5 pt-2 border-t border-inherit/40">
+                        {/* 1. Play Button */}
+                        <button
+                          type="button"
+                          onClick={(e) => handleQuickPlay(item, e)}
+                          className={`inline-flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all shadow-sm ${isPlayingThis
+                            ? isDarkMode
+                              ? 'bg-emerald-500 text-black font-bold ring-2 ring-emerald-400'
+                              : 'bg-emerald-600 text-white font-bold ring-2 ring-emerald-500'
+                            : isDarkMode
+                              ? 'bg-white hover:bg-zinc-200 text-black'
+                              : 'bg-black hover:bg-zinc-800 text-white'
+                            }`}
+                          title={isPlayingThis ? 'Pause Audio' : 'Play Audio'}
+                        >
+                          {isPlayingThis ? (
+                            <>
+                              <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                              </svg>
+                              <span>Pause</span>
+                            </>
+                          ) : (
+                            <>
+                              <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M8 5v14l11-7z" />
+                              </svg>
+                              <span>Play</span>
+                            </>
+                          )}
+                        </button>
+
+                        {/* 2. Download Button */}
+                        <button
+                          type="button"
+                          onClick={(e) => handleDownloadAudio(item.audioUrl, item.referenceVoice, item.id, e)}
+                          disabled={isDownloadingThis}
+                          className={`inline-flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all border shadow-sm active:scale-95 ${isDarkMode
+                            ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border-zinc-700 hover:text-white shadow-zinc-800/60'
+                            : 'bg-white hover:bg-zinc-100 text-zinc-800 border-zinc-300 shadow-zinc-400/30'
+                            }`}
+                          title="Download audio as MP3"
+                        >
+                          {isDownloadingThis ? (
+                            <>
+                              <svg width="12" height="12" className="animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                              </svg>
+                              <span>Saving...</span>
+                            </>
+                          ) : (
+                            <>
+                              <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                              </svg>
+                              <span>Download</span>
+                            </>
+                          )}
+                        </button>
+
+                        {/* 3. Delete Button */}
+                        <button
+                          type="button"
+                          onClick={(e) => handleDeleteHistoryItem(item.id, e)}
+                          className={`inline-flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all border shadow-sm active:scale-95 ${isDarkMode
+                            ? 'bg-zinc-900/60 hover:bg-rose-500/20 text-zinc-400 hover:text-rose-300 border-zinc-800 hover:border-rose-500/30 shadow-zinc-900/40'
+                            : 'bg-white hover:bg-rose-50 text-zinc-500 hover:text-rose-600 border-zinc-300 hover:border-rose-300 shadow-zinc-300/40'
+                            }`}
+                          title="Delete this record"
+                        >
+                          <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                          <span>Delete</span>
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
@@ -1384,17 +1365,15 @@ export default function App() {
       {showVoiceLibrary && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md animate-fadeIn">
           <div
-            className={`w-full max-w-6xl max-h-[92vh] rounded-2xl border flex flex-col shadow-2xl overflow-hidden ${
-              isDarkMode ? 'bg-[#101014] border-zinc-800 text-zinc-100' : 'bg-white border-zinc-300 text-zinc-950'
-            }`}
+            className={`w-full max-w-6xl max-h-[92vh] rounded-2xl border flex flex-col shadow-2xl overflow-hidden ${isDarkMode ? 'bg-[#101014] border-zinc-800 text-zinc-100' : 'bg-white border-zinc-300 text-zinc-950'
+              }`}
           >
             {/* Modal Header */}
             <div className={`px-6 py-4 border-b flex items-center justify-between shrink-0 ${theme.headerBg}`}>
               <div className="flex items-center gap-3">
                 <div
-                  className={`w-9 h-9 rounded-xl flex items-center justify-center ${
-                    isDarkMode ? 'bg-white text-black' : 'bg-black text-white'
-                  }`}
+                  className={`w-9 h-9 rounded-xl flex items-center justify-center ${isDarkMode ? 'bg-white text-black' : 'bg-black text-white'
+                    }`}
                 >
                   <span className="text-lg">🎙️</span>
                 </div>
@@ -1420,7 +1399,7 @@ export default function App() {
                   }
                   setShowVoiceLibrary(false);
                 }}
-                className={`p-2 rounded-xl border transition-all ${theme.btnSecondary}`}
+                className={`p-2 rounded-xl border transition-all shadow-sm active:scale-95 ${theme.btnSecondary}`}
                 title="Close Voice Library"
               >
                 <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1468,15 +1447,14 @@ export default function App() {
                       key={gender}
                       type="button"
                       onClick={() => setSelectedGenderFilter(gender)}
-                      className={`px-3 py-2 rounded-xl text-xs font-semibold transition-all border ${
-                        selectedGenderFilter === gender
-                          ? isDarkMode
-                            ? 'bg-white text-black border-white'
-                            : 'bg-black text-white border-black'
-                          : isDarkMode
+                      className={`px-3 py-2 rounded-xl text-xs font-semibold transition-all border ${selectedGenderFilter === gender
+                        ? isDarkMode
+                          ? 'bg-white text-black border-white'
+                          : 'bg-black text-white border-black'
+                        : isDarkMode
                           ? 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:bg-zinc-800'
                           : 'bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-100'
-                      }`}
+                        }`}
                     >
                       {gender === 'All' ? 'All Genders' : gender}
                     </button>
@@ -1493,32 +1471,31 @@ export default function App() {
                   const isSelected = selectedLangFilter === lang;
                   const flag =
                     lang === 'English' ? '🇺🇸' :
-                    lang === 'Urdu' ? '🇵🇰' :
-                    lang === 'Hindi' ? '🇮🇳' :
-                    lang === 'Arabic' ? '🇸🇦' :
-                    lang === 'Chinese' ? '🇨🇳' :
-                    lang === 'Spanish' ? '🇪🇸' :
-                    lang === 'French' ? '🇫🇷' :
-                    lang === 'German' ? '🇩🇪' :
-                    lang === 'Japanese' ? '🇯🇵' :
-                    lang === 'Korean' ? '🇰🇷' :
-                    lang === 'Italian' ? '🇮🇹' :
-                    lang === 'Russian' ? '🇷🇺' :
-                    lang === 'Portuguese' ? '🇧🇷' : '🌐';
+                      lang === 'Urdu' ? '🇵🇰' :
+                        lang === 'Hindi' ? '🇮🇳' :
+                          lang === 'Arabic' ? '🇸🇦' :
+                            lang === 'Chinese' ? '🇨🇳' :
+                              lang === 'Spanish' ? '🇪🇸' :
+                                lang === 'French' ? '🇫🇷' :
+                                  lang === 'German' ? '🇩🇪' :
+                                    lang === 'Japanese' ? '🇯🇵' :
+                                      lang === 'Korean' ? '🇰🇷' :
+                                        lang === 'Italian' ? '🇮🇹' :
+                                          lang === 'Russian' ? '🇷🇺' :
+                                            lang === 'Portuguese' ? '🇧🇷' : '🌐';
                   return (
                     <button
                       key={lang}
                       type="button"
                       onClick={() => setSelectedLangFilter(lang)}
-                      className={`px-3 py-1.5 rounded-lg font-semibold shrink-0 transition-all border flex items-center gap-1.5 text-xs ${
-                        isSelected
-                          ? isDarkMode
-                            ? 'bg-zinc-100 text-zinc-950 border-white'
-                            : 'bg-zinc-900 text-white border-zinc-900'
-                          : isDarkMode
-                          ? 'bg-zinc-900/80 text-zinc-400 border-zinc-800 hover:text-white hover:bg-zinc-800'
-                          : 'bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-100'
-                      }`}
+                      className={`px-3 py-1.5 rounded-lg font-semibold shrink-0 transition-all border flex items-center gap-1.5 text-xs shadow-sm active:scale-95 ${isSelected
+                        ? isDarkMode
+                          ? 'bg-zinc-100 text-zinc-950 border-white shadow-zinc-700/50'
+                          : 'bg-zinc-900 text-white border-zinc-900 shadow-zinc-500/40'
+                        : isDarkMode
+                          ? 'bg-zinc-900/80 text-zinc-400 border-zinc-800 hover:text-white hover:bg-zinc-800 shadow-zinc-900/40'
+                          : 'bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-100 shadow-zinc-300/40'
+                        }`}
                     >
                       <span>{flag}</span>
                       <span>{lang}</span>
@@ -1539,15 +1516,14 @@ export default function App() {
                       key={cat}
                       type="button"
                       onClick={() => setSelectedCatFilter(cat)}
-                      className={`px-2.5 py-1 rounded-md text-[11px] font-medium shrink-0 transition-all border ${
-                        isSelected
-                          ? isDarkMode
-                            ? 'bg-white text-black border-white'
-                            : 'bg-black text-white border-black'
-                          : isDarkMode
-                          ? 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:bg-zinc-800'
-                          : 'bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-100'
-                      }`}
+                      className={`px-2.5 py-1 rounded-md text-[11px] font-medium shrink-0 transition-all border shadow-sm active:scale-95 ${isSelected
+                        ? isDarkMode
+                          ? 'bg-white text-black border-white shadow-zinc-700/50'
+                          : 'bg-black text-white border-black shadow-zinc-500/40'
+                        : isDarkMode
+                          ? 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:bg-zinc-800 shadow-zinc-900/40'
+                          : 'bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-100 shadow-zinc-300/40'
+                        }`}
                     >
                       {cat}
                     </button>
@@ -1571,15 +1547,14 @@ export default function App() {
                   return (
                     <div
                       key={item.id}
-                      className={`p-4 rounded-xl border transition-all flex flex-col justify-between gap-3 ${
-                        isCurrentlySelected
-                          ? isDarkMode
-                            ? 'bg-zinc-900/90 border-white ring-1 ring-white/50'
-                            : 'bg-zinc-50 border-black ring-1 ring-black/40'
-                          : isDarkMode
+                      className={`p-4 rounded-xl border transition-all flex flex-col justify-between gap-3 ${isCurrentlySelected
+                        ? isDarkMode
+                          ? 'bg-zinc-900/90 border-white ring-1 ring-white/50'
+                          : 'bg-zinc-50 border-black ring-1 ring-black/40'
+                        : isDarkMode
                           ? 'bg-zinc-900/40 hover:bg-zinc-900/80 border-zinc-800/80 hover:border-zinc-700'
                           : 'bg-white hover:bg-zinc-50 border-zinc-200 hover:border-zinc-300 shadow-sm'
-                      }`}
+                        }`}
                     >
                       <div className="space-y-2">
                         {/* Card Top: Flag, Name, Category */}
@@ -1599,9 +1574,12 @@ export default function App() {
                           {/* Gender & Pitch Offset Tag */}
                           <div className="flex flex-col items-end gap-1 shrink-0">
                             <span
-                              className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                                item.gender === 'Female' ? 'bg-fuchsia-500/20 text-fuchsia-300' : 'bg-blue-500/20 text-blue-300'
-                              }`}
+                              className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${item.gender === 'Female'
+                                ? isDarkMode
+                                  ? 'bg-fuchsia-500/20 text-fuchsia-300'
+                                  : 'bg-black text-white'
+                                : 'bg-blue-500/20 text-blue-300'
+                                }`}
                             >
                               {item.gender}
                             </span>
@@ -1622,9 +1600,8 @@ export default function App() {
                             {item.tags.slice(0, 3).map((tag) => (
                               <span
                                 key={tag}
-                                className={`text-[9px] px-1.5 py-0.5 rounded ${
-                                  isDarkMode ? 'bg-zinc-800 text-zinc-400' : 'bg-zinc-100 text-zinc-600'
-                                }`}
+                                className={`text-[9px] px-1.5 py-0.5 rounded ${isDarkMode ? 'bg-zinc-800 text-zinc-400' : 'bg-zinc-100 text-zinc-600'
+                                  }`}
                               >
                                 #{tag}
                               </span>
@@ -1639,13 +1616,12 @@ export default function App() {
                         <button
                           type="button"
                           onClick={(e) => handleToggleCardPreview(item, e)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
-                            isPlaying
-                              ? 'bg-emerald-500 text-black font-bold animate-pulse'
-                              : isDarkMode
-                              ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200'
-                              : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-800'
-                          }`}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm active:scale-95 ${isPlaying
+                            ? 'bg-emerald-500 text-black font-bold animate-pulse shadow-emerald-500/40'
+                            : isDarkMode
+                              ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200 shadow-zinc-800/60'
+                              : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-800 shadow-zinc-300/50'
+                            }`}
                           title="Play preview audio sample for this voice"
                         >
                           {isPlaying ? (
@@ -1669,13 +1645,12 @@ export default function App() {
                         <button
                           type="button"
                           onClick={() => handleSelectVoiceFromLibrary(item, true)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                            isCurrentlySelected
-                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                              : isDarkMode
-                              ? 'bg-white hover:bg-zinc-200 text-black'
-                              : 'bg-black hover:bg-zinc-800 text-white'
-                          }`}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm active:scale-95 ${isCurrentlySelected
+                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                            : isDarkMode
+                              ? 'bg-white hover:bg-zinc-200 text-black shadow-zinc-700/50'
+                              : 'bg-black hover:bg-zinc-800 text-white shadow-zinc-500/40'
+                            }`}
                           title="Select voice and auto-fill native sample script"
                         >
                           {isCurrentlySelected ? 'Selected ✓' : 'Use Voice'}
