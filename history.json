@@ -1,12 +1,66 @@
 [
   {
-    "id": "conv_1792264318034",
+    "id": "conv_1792336950116",
     "deviceId": "dev_mvcnk6y3_mp5nz6lu",
-    "timestamp": "2026-10-17T19:12:39.581Z",
-    "text": "नमस्ते। सफलता का रहस्य निरंतर प्रयास, अटूट विश्वास और सकारात्मक सोच में छिपा है।",
-    "referenceVoice": "Madhur (Hindi - Warm Narration & Audiobooks).wav",
-    "emotion": "neutral",
-    "styleDegree": 1,
-    "audioUrl": "/audio/output_1792264318034.mp3"
+    "timestamp": "2026-10-18T15:22:37.038Z",
+    "text": "Helen woke at a quarter past nine.\n\nI heard her stir, the bedsprings, the slow creak of the floorboard by the window. I ...",
+    "referenceVoice": "Adam (Deep Narration - ElevenLabs Style).wav",
+    "audioUrl": "/audio/output_1792336950116.mp3"
+  },
+  {
+    "id": "conv_1792336847172",
+    "deviceId": "test-device",
+    "timestamp": "2026-10-18T15:20:49.761Z",
+    "text": "Testing voice resolution by clean name.",
+    "referenceVoice": "Rachel (Calm & Authentic - ElevenLabs Style).wav",
+    "audioUrl": "/audio/output_1792336847172.mp3"
+  },
+  {
+    "id": "conv_1792336843793",
+    "deviceId": "test-device",
+    "timestamp": "2026-10-18T15:20:47.075Z",
+    "text": "Testing voice resolution by ID.",
+    "referenceVoice": "Adam (Deep Narration - ElevenLabs Style).wav",
+    "audioUrl": "/audio/output_1792336843793.mp3"
+  },
+  {
+    "id": "conv_1792336729438",
+    "deviceId": "test-device",
+    "timestamp": "2026-10-18T15:18:52.280Z",
+    "text": "This is a quick conversation test with Rachel.",
+    "referenceVoice": "Rachel (Calm & Authentic - ElevenLabs Style).wav",
+    "audioUrl": "/audio/output_1792336729438.mp3"
+  },
+  {
+    "id": "conv_1792336726511",
+    "deviceId": "test-device",
+    "timestamp": "2026-10-18T15:18:49.333Z",
+    "text": "Urdu language neural testing. Ye bilkul theek kaam kar raha hai.",
+    "referenceVoice": "Asad (Urdu - News & Current Affairs Anchor).wav",
+    "audioUrl": "/audio/output_1792336726511.mp3"
+  },
+  {
+    "id": "conv_1792336669258",
+    "deviceId": "test-device",
+    "timestamp": "2026-10-18T15:17:52.988Z",
+    "text": "Welcome to SK VoiceClone Studio. Fast neural synthesis is now online.",
+    "referenceVoice": "Adam (Deep Narration - ElevenLabs Style).wav",
+    "audioUrl": "/audio/output_1792336669258.mp3"
+  },
+  {
+    "id": "conv_1792336187170",
+    "deviceId": "test-device",
+    "timestamp": "2026-10-18T15:09:49.475Z",
+    "text": "Hello world, this is a test synthesis.",
+    "referenceVoice": "Adam (Conversational & Podcast).wav",
+    "audioUrl": "/audio/output_1792336187170.mp3"
+  },
+  {
+    "id": "conv_1792335762032",
+    "deviceId": "debug_123",
+    "timestamp": "2026-10-18T15:02:44.345Z",
+    "text": "Hello this is a test.",
+    "referenceVoice": "Adam (Deep Narration - ElevenLabs Style).wav",
+    "audioUrl": "/audio/output_1792335762032.mp3"
   }
 ]

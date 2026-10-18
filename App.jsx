@@ -225,7 +225,23 @@ export default function App() {
         params: { deviceId: devId }
       });
       const serverHistory = res.data.history || [];
-      setHistory(serverHistory);
+      const activeJobs = res.data.activeJobs || [];
+
+      setHistory((prevHistory) => {
+        // Preserve local generating cards while active
+        const localGenerating = prevHistory.filter((item) => item.status === 'generating');
+        const combined = [...localGenerating, ...activeJobs, ...serverHistory];
+        const unique = [];
+        const seen = new Set();
+        for (const item of combined) {
+          if (!seen.has(item.id)) {
+            seen.add(item.id);
+            unique.push(item);
+          }
+        }
+        return unique.slice(0, 50);
+      });
+
       try {
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(serverHistory));
       } catch (e) { }
@@ -306,6 +322,52 @@ export default function App() {
     setLoading(true);
     setErrorMessage(null);
 
+    const devId = getDeviceId();
+    const tempJobId = `conv_${Date.now()}`;
+
+    // Optimistically insert a generating card so it immediately appears in the History section
+    const pendingRecord = {
+      id: tempJobId,
+      deviceId: devId,
+      timestamp: new Date().toISOString(),
+      text: text.trim().length > 120 ? text.trim().substring(0, 120) + '...' : text.trim(),
+      referenceVoice: referenceVoice,
+      status: 'generating'
+    };
+
+    setHistory((prev) => [pendingRecord, ...prev.filter((item) => item.id !== tempJobId)]);
+
+    // Real-time polling to automatically discover completed generation without manual browser refresh
+    let pollTimer = setInterval(async () => {
+      try {
+        const pollRes = await axios.get(`${API_BASE}/api/history`, {
+          params: { deviceId: devId }
+        });
+        const serverList = pollRes.data.history || [];
+        const match = serverList.find(
+          (it) => it.id === tempJobId || (it.text === pendingRecord.text && Math.abs(new Date(it.timestamp) - new Date(pendingRecord.timestamp)) < 25000)
+        );
+
+        if (match) {
+          clearInterval(pollTimer);
+          pollTimer = null;
+          setHistory(serverList);
+          try {
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(serverList));
+          } catch (e) {}
+          const fullAudioUrl = match.audioUrl.startsWith('http') ? match.audioUrl : `${API_BASE}${match.audioUrl}`;
+          setAudioUrl(fullAudioUrl);
+          setLoading(false);
+          setTimeout(() => {
+            if (audioPlayerRef.current) {
+              audioPlayerRef.current.currentTime = 0;
+              audioPlayerRef.current.play().catch(() => {});
+            }
+          }, 150);
+        }
+      } catch (e) {}
+    }, 1200);
+
     try {
       const response = await axios.post(`${API_BASE}/api/clone-voice`, {
         text: text.trim(),
@@ -313,9 +375,14 @@ export default function App() {
         speed: speed,
         pitch: pitch,
         pause: pause,
-        deviceId: getDeviceId(),
+        deviceId: devId,
         language: currentVoiceObj?.languageCode || 'en'
       });
+
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
 
       if (response.data && response.data.success) {
         const rawUrl = response.data.audioUrl;
@@ -323,7 +390,7 @@ export default function App() {
         setAudioUrl(fullAudioUrl);
 
         const newRecord = response.data.historyRecord || {
-          id: `conv_${Date.now()}`,
+          id: tempJobId,
           timestamp: new Date().toISOString(),
           text: text.trim().length > 120 ? text.trim().substring(0, 120) + '...' : text.trim(),
           referenceVoice: referenceVoice,
@@ -331,7 +398,7 @@ export default function App() {
         };
 
         setHistory((prevHistory) => {
-          const updated = [newRecord, ...prevHistory.filter((item) => item.id !== newRecord.id)].slice(0, 50);
+          const updated = [newRecord, ...prevHistory.filter((item) => item.id !== tempJobId && item.id !== newRecord.id)].slice(0, 50);
           try {
             localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
           } catch (e) {
@@ -347,13 +414,37 @@ export default function App() {
           }
         }, 150);
       } else {
+        setHistory((prev) => prev.filter((item) => item.id !== tempJobId));
         setErrorMessage(response.data.error || 'Failed to synthesize voice.');
       }
     } catch (err) {
       console.error('Error generating voice:', err);
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+
+      // Check once more from server history before showing error
+      try {
+        const pollRes = await axios.get(`${API_BASE}/api/history`, { params: { deviceId: devId } });
+        const serverList = pollRes.data.history || [];
+        const match = serverList.find((it) => it.id === tempJobId);
+        if (match) {
+          setHistory(serverList);
+          const fullAudioUrl = match.audioUrl.startsWith('http') ? match.audioUrl : `${API_BASE}${match.audioUrl}`;
+          setAudioUrl(fullAudioUrl);
+          return;
+        }
+      } catch (e) {}
+
+      setHistory((prev) => prev.filter((item) => item.id !== tempJobId));
       const serverError = err.response?.data?.details || err.response?.data?.error || err.message;
       setErrorMessage(`Generation failed: ${serverError}`);
     } finally {
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
       setLoading(false);
     }
   };
@@ -1236,8 +1327,56 @@ export default function App() {
                 </div>
               ) : (
                 filteredHistory.map((item) => {
+                  const isGeneratingThis = item.status === 'generating';
                   const isPlayingThis = playingHistoryId === item.id;
                   const isDownloadingThis = downloadingId === item.id;
+
+                  if (isGeneratingThis) {
+                    return (
+                      <div
+                        key={item.id}
+                        className={`p-3.5 rounded-xl border transition-all flex flex-col gap-2.5 relative overflow-hidden ${
+                          isDarkMode
+                            ? 'bg-emerald-950/25 border-emerald-500/50 shadow-md ring-1 ring-emerald-500/30'
+                            : 'bg-emerald-50/90 border-emerald-400/60 shadow-sm'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <span className="relative flex h-2.5 w-2.5">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                            </span>
+                            <span className="text-xs font-bold truncate text-emerald-400">
+                              {(item.referenceVoice || 'Voice').replace('.wav', '')}
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/30 animate-pulse">
+                            Synthesizing...
+                          </span>
+                        </div>
+
+                        <p className={`text-xs ${theme.textMuted} line-clamp-2 leading-relaxed italic`}>
+                          "{item.text}"
+                        </p>
+
+                        <div className="flex items-center justify-between pt-1">
+                          <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 font-medium">
+                            <svg className="animate-spin h-3.5 w-3.5 text-emerald-400 shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <span>Generating audio with AI...</span>
+                          </div>
+                          <div className="flex items-end gap-1 h-3.5">
+                            <span className="w-1 bg-emerald-400 rounded-full animate-bounce h-2"></span>
+                            <span className="w-1 bg-emerald-400 rounded-full animate-bounce [animation-delay:0.2s] h-3.5"></span>
+                            <span className="w-1 bg-emerald-400 rounded-full animate-bounce [animation-delay:0.4s] h-2"></span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
 
                   return (
                     <div

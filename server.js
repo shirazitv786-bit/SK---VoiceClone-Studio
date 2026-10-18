@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const multer = require('multer');
 
 const app = express();
@@ -87,6 +87,223 @@ try {
 } catch (pErr) {
   console.warn(`[TTS Engine] Warning: Could not verify Python executable "${detectedPython}":`, pErr.message);
 }
+
+// Active background jobs tracked by deviceId
+const activeJobs = new Map();
+
+// =============================================================================
+// PERSISTENT WARM PYTHON TTS WORKER DAEMON
+// Keeps Python, Edge-TTS, and registries loaded in memory for sub-second synthesis
+// =============================================================================
+let ttsWorkerProcess = null;
+let ttsWorkerReady = false;
+const pendingWorkerRequests = new Map();
+let workerLineBuffer = '';
+
+const startTtsWorker = () => {
+  const pythonBin = getPythonExecutable();
+  const workerScript = path.join(__dirname, 'tts_worker.py');
+
+  if (!fs.existsSync(workerScript)) {
+    console.warn('[TTS Engine] tts_worker.py not found, will use per-request execution.');
+    return;
+  }
+
+  try {
+    ttsWorkerReady = false;
+    ttsWorkerProcess = spawn(pythonBin, [workerScript], {
+      cwd: __dirname,
+      env: {
+        ...process.env,
+        COQUI_TOS_AGREED: '1',
+        PYTHONIOENCODING: 'utf-8',
+        PYTHONUNBUFFERED: '1'
+      }
+    });
+
+    ttsWorkerProcess.stdout.on('data', (data) => {
+      workerLineBuffer += data.toString();
+      const lines = workerLineBuffer.split('\n');
+      workerLineBuffer = lines.pop();
+
+      for (const rawLine of lines) {
+        const line = rawLine.trim();
+        if (!line) continue;
+        if (line === 'READY') {
+          ttsWorkerReady = true;
+          console.log('[TTS Engine] Warm Python Daemon is READY and standing by for instant synthesis.');
+          continue;
+        }
+
+        try {
+          const res = JSON.parse(line);
+          const reqId = res.id;
+          if (reqId && pendingWorkerRequests.has(reqId)) {
+            const { resolve, reject, timeoutId } = pendingWorkerRequests.get(reqId);
+            clearTimeout(timeoutId);
+            pendingWorkerRequests.delete(reqId);
+            if (res.success) {
+              resolve(res);
+            } else {
+              reject(new Error(res.error || 'TTS Worker synthesis failed.'));
+            }
+          }
+        } catch (e) {
+          console.warn('[TTS Engine] Non-JSON worker output:', line);
+        }
+      }
+    });
+
+    ttsWorkerProcess.stderr.on('data', (data) => {
+      const errStr = data.toString().trim();
+      if (errStr && !errStr.includes('UserWarning') && !errStr.includes('DeprecationWarning')) {
+        console.warn('[TTS Worker Notice]:', errStr);
+      }
+    });
+
+    ttsWorkerProcess.on('error', (err) => {
+      console.error('[TTS Worker Error]:', err.message);
+      ttsWorkerReady = false;
+    });
+
+    ttsWorkerProcess.on('exit', (code, signal) => {
+      console.warn(`[TTS Engine] Worker exited (code: ${code}, signal: ${signal}). Auto-restarting in 1s...`);
+      ttsWorkerReady = false;
+      ttsWorkerProcess = null;
+
+      for (const [reqId, { reject, timeoutId }] of pendingWorkerRequests.entries()) {
+        clearTimeout(timeoutId);
+        reject(new Error('TTS Worker process exited unexpectedly.'));
+      }
+      pendingWorkerRequests.clear();
+
+      setTimeout(startTtsWorker, 1000);
+    });
+  } catch (err) {
+    console.error('[TTS Engine] Failed to spawn warm worker daemon:', err.message);
+    ttsWorkerReady = false;
+  }
+};
+
+startTtsWorker();
+
+/**
+ * Cold start direct runner fallback using execFile with automated offline speech.
+ */
+const runDirectRunner = ({ id, text, referenceVoicePath, language, targetAudioPath, options }) => {
+  return new Promise((resolve, reject) => {
+    const pythonBin = getPythonExecutable();
+    const runnerScript = path.join(__dirname, 'tts_runner.py');
+    const timestamp = Date.now();
+    const tempScriptPath = path.join(tempDir, `temp_script_${timestamp}_${Math.random().toString(36).substring(7)}.txt`);
+    const tempOptionsPath = path.join(tempDir, `temp_opts_${timestamp}_${Math.random().toString(36).substring(7)}.json`);
+
+    fs.writeFileSync(tempScriptPath, text.trim(), 'utf8');
+    fs.writeFileSync(tempOptionsPath, JSON.stringify(options || {}), 'utf8');
+
+    const args = [
+      runnerScript,
+      tempScriptPath,
+      referenceVoicePath,
+      language,
+      targetAudioPath,
+      tempOptionsPath
+    ];
+
+    const execOptions = {
+      cwd: __dirname,
+      env: {
+        ...process.env,
+        COQUI_TOS_AGREED: '1',
+        PYTHONIOENCODING: 'utf-8',
+        PYTHONUNBUFFERED: '1'
+      }
+    };
+
+    execFile(pythonBin, args, execOptions, (error, stdout, stderr) => {
+      if (fs.existsSync(tempScriptPath)) {
+        try { fs.unlinkSync(tempScriptPath); } catch (e) {}
+      }
+      if (fs.existsSync(tempOptionsPath)) {
+        try { fs.unlinkSync(tempOptionsPath); } catch (e) {}
+      }
+
+      if (error) {
+        return reject(new Error(stderr || error.message));
+      }
+      resolve({ success: true, stdout, time: 'fallback' });
+    });
+  });
+};
+
+/**
+ * Execute speech synthesis via the warm worker with zero-delay auto-recovery fallback.
+ */
+const synthesizeSpeech = ({ id, text, referenceVoicePath, language, targetAudioPath, options }) => {
+  // 1. Primary: Use persistent warm worker for instant speed
+  if (ttsWorkerProcess && ttsWorkerReady) {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+
+      // 20-second threshold: if worker ever stalls, automatically trigger direct execution
+      const timeoutId = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        if (pendingWorkerRequests.has(id)) {
+          pendingWorkerRequests.delete(id);
+        }
+        console.warn(`[TTS Engine] Worker took >20s for ${id}. Seamlessly recovering via direct runner...`);
+        runDirectRunner({ id, text, referenceVoicePath, language, targetAudioPath, options })
+          .then(resolve)
+          .catch(reject);
+      }, 20000);
+
+      pendingWorkerRequests.set(id, {
+        resolve: (val) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeoutId);
+          resolve(val);
+        },
+        reject: (err) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeoutId);
+          console.warn(`[TTS Engine] Worker notice for ${id}: ${err.message}. Seamlessly recovering via direct runner...`);
+          runDirectRunner({ id, text, referenceVoicePath, language, targetAudioPath, options })
+            .then(resolve)
+            .catch(reject);
+        },
+        timeoutId
+      });
+
+      const payload = {
+        id,
+        text,
+        referenceVoice: referenceVoicePath,
+        language,
+        outputPath: targetAudioPath,
+        options
+      };
+
+      try {
+        ttsWorkerProcess.stdin.write(JSON.stringify(payload) + '\n');
+      } catch (writeErr) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+        pendingWorkerRequests.delete(id);
+        console.warn(`[TTS Engine] Stdin write error. Using direct runner: ${writeErr.message}`);
+        runDirectRunner({ id, text, referenceVoicePath, language, targetAudioPath, options })
+          .then(resolve)
+          .catch(reject);
+      }
+    });
+  }
+
+  // 2. Direct runner fallback if worker process not currently ready
+  return runDirectRunner({ id, text, referenceVoicePath, language, targetAudioPath, options });
+};
 
 // Helper functions for history management
 const readHistory = () => {
@@ -204,11 +421,12 @@ app.post('/api/upload-voice', upload.single('voiceSample'), (req, res) => {
 app.get('/api/history', (req, res) => {
   const { deviceId } = req.query;
   if (!deviceId) {
-    return res.json({ history: [] });
+    return res.json({ history: [], activeJobs: [] });
   }
   const allHistory = readHistory();
   const deviceHistory = allHistory.filter(item => item.deviceId === deviceId);
-  return res.json({ history: deviceHistory });
+  const deviceActiveJobs = Array.from(activeJobs.values()).filter(item => item.deviceId === deviceId);
+  return res.json({ history: deviceHistory, activeJobs: deviceActiveJobs });
 });
 
 /**
@@ -267,7 +485,7 @@ app.delete('/api/history', (req, res) => {
  * POST /api/clone-voice
  * Executes Python runner using execFile with emotion & acoustic modulation support
  */
-app.post('/api/clone-voice', (req, res) => {
+app.post('/api/clone-voice', async (req, res) => {
   const {
     text,
     referenceVoice,
@@ -282,130 +500,136 @@ app.post('/api/clone-voice', (req, res) => {
     return res.status(400).json({ error: 'Text prompt is required.' });
   }
 
-  if (!referenceVoice || !referenceVoice.trim()) {
-    return res.status(400).json({ error: 'Reference voice selection is required.' });
+  // Flexible Voice Resolution: filename, id, name, or fallback
+  let resolvedVoiceFilename = null;
+  const cleanVoiceInput = (referenceVoice || '').trim();
+
+  // 1. Direct file match in voices directory
+  if (cleanVoiceInput && fs.existsSync(path.join(voicesDir, path.basename(cleanVoiceInput)))) {
+    resolvedVoiceFilename = path.basename(cleanVoiceInput);
+  } else if (cleanVoiceInput && fs.existsSync(path.join(voicesDir, `${path.basename(cleanVoiceInput)}.wav`))) {
+    resolvedVoiceFilename = `${path.basename(cleanVoiceInput)}.wav`;
   }
 
-  const referenceVoicePath = path.join('voices', path.basename(referenceVoice));
-  const absoluteVoicePath = path.join(__dirname, referenceVoicePath);
-
-  if (!fs.existsSync(absoluteVoicePath)) {
-    return res.status(404).json({
-      error: `Reference voice sample "${referenceVoice}" not found on server.`
-    });
-  }
-
-  // Detect language from registry if not explicitly provided
-  let detectedLang = language || 'en';
-  if (!language && fs.existsSync(registryFile)) {
+  // 2. Registry match by id, name, or filename
+  let registryMatch = null;
+  let registry = [];
+  if (fs.existsSync(registryFile)) {
     try {
-      const reg = JSON.parse(fs.readFileSync(registryFile, 'utf8') || '[]');
-      const match = reg.find(v => v.filename === referenceVoice || v.name === referenceVoice);
-      if (match && match.languageCode) {
-        detectedLang = match.languageCode;
+      registry = JSON.parse(fs.readFileSync(registryFile, 'utf8') || '[]');
+      registryMatch = registry.find(v => 
+        v.filename === cleanVoiceInput ||
+        v.name === cleanVoiceInput ||
+        v.id === cleanVoiceInput ||
+        v.name.toLowerCase() === cleanVoiceInput.toLowerCase() ||
+        (v.filename && v.filename.toLowerCase() === cleanVoiceInput.toLowerCase())
+      );
+      if (registryMatch && registryMatch.filename && fs.existsSync(path.join(voicesDir, registryMatch.filename))) {
+        resolvedVoiceFilename = registryMatch.filename;
       }
     } catch (e) {}
   }
 
-  // Generate unique timestamped output audio filename and destination path
+  // 3. Case-insensitive filesystem fallback
+  if (!resolvedVoiceFilename) {
+    try {
+      const allFiles = fs.readdirSync(voicesDir);
+      const lowerInput = cleanVoiceInput.toLowerCase();
+      const found = allFiles.find(f => f.toLowerCase() === lowerInput || f.toLowerCase() === `${lowerInput}.wav`);
+      if (found) resolvedVoiceFilename = found;
+    } catch (e) {}
+  }
+
+  // 4. Default fallback: Adam (Deep Narration) or first available voice in voicesDir
+  if (!resolvedVoiceFilename) {
+    const defaultAdam = 'Adam (Deep Narration - ElevenLabs Style).wav';
+    if (fs.existsSync(path.join(voicesDir, defaultAdam))) {
+      resolvedVoiceFilename = defaultAdam;
+    } else {
+      const allWavs = fs.readdirSync(voicesDir).filter(f => f.toLowerCase().endsWith('.wav'));
+      if (allWavs.length > 0) resolvedVoiceFilename = allWavs[0];
+    }
+  }
+
+  if (!resolvedVoiceFilename) {
+    return res.status(404).json({ error: 'No voice samples found on server.' });
+  }
+
+  const absoluteVoicePath = path.join(voicesDir, resolvedVoiceFilename);
+
+  // Detect language from registry if not explicitly provided
+  let detectedLang = language || 'en';
+  if (!language && registry.length > 0) {
+    const match = registryMatch || registry.find(v => v.filename === resolvedVoiceFilename || v.name === resolvedVoiceFilename);
+    if (match && match.languageCode) {
+      detectedLang = match.languageCode;
+    }
+  }
+
   const timestamp = Date.now();
   const audioFilename = `output_${timestamp}.mp3`;
   const targetAudioPath = path.join(audioDir, audioFilename);
+  const jobId = `conv_${timestamp}`;
 
-  // Temporary file for safe script handling without Windows CLI arg limits
-  const tempScriptPath = path.join(tempDir, `temp_script_${timestamp}_${Math.random().toString(36).substring(7)}.txt`);
-  fs.writeFileSync(tempScriptPath, text.trim(), 'utf8');
-
-  // Temporary file for acoustic modulation options
-  const tempOptionsPath = path.join(tempDir, `temp_opts_${timestamp}_${Math.random().toString(36).substring(7)}.json`);
   const optionsPayload = {
     speed: (speed !== undefined && speed !== null) ? parseInt(speed) : -8,
     pitch: (pitch !== undefined && pitch !== null) ? parseInt(pitch) : -4,
     pause: parseFloat(pause) || 0.22
   };
-  fs.writeFileSync(tempOptionsPath, JSON.stringify(optionsPayload), 'utf8');
 
-  const pythonBin = getPythonExecutable();
-  const runnerScript = path.join(__dirname, 'tts_runner.py');
+  // Register in activeJobs so frontend polling can see in-progress generation
+  activeJobs.set(jobId, {
+    id: jobId,
+    deviceId: deviceId,
+    timestamp: new Date().toISOString(),
+    text: text.trim().length > 120 ? text.trim().substring(0, 120) + '...' : text.trim(),
+    referenceVoice: resolvedVoiceFilename,
+    status: 'generating'
+  });
 
-  // Arguments array passed directly to OS without cmd.exe shell interpolation
-  const args = [
-    runnerScript,
-    tempScriptPath,
-    absoluteVoicePath,
-    detectedLang,
-    targetAudioPath,
-    tempOptionsPath
-  ];
+  try {
+    console.log(`[TTS Engine] Synthesizing voice "${resolvedVoiceFilename}" (${detectedLang}) for device ${deviceId}...`);
+    const t0 = Date.now();
+    const result = await synthesizeSpeech({
+      id: jobId,
+      text: text.trim(),
+      referenceVoicePath: absoluteVoicePath,
+      language: detectedLang,
+      targetAudioPath: targetAudioPath,
+      options: optionsPayload
+    });
 
-  console.log(`Executing voice cloning via: ${pythonBin} [Lang: ${detectedLang}]`);
-  console.log(`Target output: ${audioFilename} [Pace: ${optionsPayload.speed}%, Pitch: ${optionsPayload.pitch}Hz, Pause: ${optionsPayload.pause}s]`);
+    const elapsedMs = Date.now() - t0;
+    console.log(`[TTS Engine] Completed in ${elapsedMs}ms: ${audioFilename}`);
 
-  // Child process execution options with Coqui license agreement environment variable
-  const execOptions = {
-    cwd: __dirname,
-    env: {
-      ...process.env,
-      COQUI_TOS_AGREED: '1',
-      PYTHONIOENCODING: 'utf-8',
-      PYTHONUNBUFFERED: '1'
-    }
-  };
-
-  execFile(pythonBin, args, execOptions, (error, stdout, stderr) => {
-    // Cleanup temporary files
-    if (fs.existsSync(tempScriptPath)) {
-      try {
-        fs.unlinkSync(tempScriptPath);
-      } catch (e) {
-        console.error('Failed to remove temp script file:', e);
-      }
-    }
-
-    if (fs.existsSync(tempOptionsPath)) {
-      try {
-        fs.unlinkSync(tempOptionsPath);
-      } catch (e) {
-        console.error('Failed to remove temp options file:', e);
-      }
-    }
-
-    if (error) {
-      console.error('Python TTS execution failed:\n', stderr || error.message);
-      let errorDetails = stderr || error.message;
-      if (error.code === 'ENOENT') {
-        errorDetails = `Python runtime not found (${pythonBin}). Please verify Python 3 is installed.`;
-      }
-      return res.status(500).json({
-        success: false,
-        error: 'Voice cloning generation failed.',
-        details: errorDetails
-      });
-    }
-
-    console.log('Python script output:', stdout);
-
-    // Relative audio URL served via /audio route
     const audioUrl = `/audio/${audioFilename}`;
-
-    // Metadata for this conversion (tagged by deviceId for background completion & device isolation)
     const historyEntry = {
-      id: `conv_${timestamp}`,
+      id: jobId,
       deviceId: deviceId,
       timestamp: new Date().toISOString(),
       text: text.trim().length > 120 ? text.trim().substring(0, 120) + '...' : text.trim(),
-      referenceVoice: referenceVoice,
+      referenceVoice: resolvedVoiceFilename,
       audioUrl: audioUrl
     };
 
     appendHistory(historyEntry);
+    activeJobs.delete(jobId);
 
     return res.json({
       success: true,
       audioUrl: audioUrl,
-      historyRecord: historyEntry
+      historyRecord: historyEntry,
+      duration: `${(elapsedMs / 1000).toFixed(2)}s`
     });
-  });
+  } catch (error) {
+    activeJobs.delete(jobId);
+    console.error('[TTS Engine] Synthesis failed:', error.message);
+    return res.status(500).json({
+      success: false,
+      error: 'Voice cloning generation failed.',
+      details: error.message
+    });
+  }
 });
 
 /**
@@ -496,7 +720,7 @@ app.use((err, req, res, next) => {
 });
 
 // Start the Express server
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`===============================================`);
   console.log(` AI Voice Cloning Backend Server Running!`);
   console.log(` URL: http://localhost:${PORT}`);
@@ -505,3 +729,16 @@ app.listen(PORT, () => {
   console.log(` Python executable: ${getPythonExecutable()}`);
   console.log(`===============================================`);
 });
+
+// Clean up child process on shutdown
+const cleanUpWorker = () => {
+  if (ttsWorkerProcess) {
+    try {
+      ttsWorkerProcess.kill();
+    } catch (e) {}
+    ttsWorkerProcess = null;
+  }
+};
+process.on('SIGINT', () => { cleanUpWorker(); process.exit(0); });
+process.on('SIGTERM', () => { cleanUpWorker(); process.exit(0); });
+process.on('exit', cleanUpWorker);

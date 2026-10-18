@@ -2,33 +2,25 @@ import os
 import sys
 import re
 import time
-import wave
 import json
 import shutil
 import asyncio
 import tempfile
 import subprocess
-import numpy as np
 
 # Automatically accept Coqui CPML license in non-interactive environment
 os.environ["COQUI_TOS_AGREED"] = "1"
 
-# Check available engines
-HAS_EDGE_TTS = False
+# Check available engines without heavy imports
+HAS_EDGE_TTS = True
 try:
     import edge_tts
-    import soundfile as sf
-    HAS_EDGE_TTS = True
 except ImportError:
     HAS_EDGE_TTS = False
 
-HAS_COQUI = False
-try:
-    import torch
-    from TTS.api import TTS
-    HAS_COQUI = True
-except ImportError:
-    HAS_COQUI = False
+# Lazy flag for Coqui - DO NOT import torch or TTS at module level!
+# Importing torch takes 30-45+ seconds on Windows and is only needed for custom voice cloning.
+HAS_COQUI = None
 
 # Load Full 120-Voice Studio Registry
 VOICES_REGISTRY = []
@@ -138,7 +130,6 @@ LANGUAGE_VOICE_MAP = {
 }
 
 
-
 def humanize_script_text(text: str) -> str:
     """
     Cleans and structures text to sound authentically human:
@@ -147,19 +138,22 @@ def humanize_script_text(text: str) -> str:
     - Cleans punctuation and whitespace
     """
     t = text.strip()
-    # Normalize multiple periods / ellipses into a clean breath pause
     t = re.sub(r'\.{2,}', '... ', t)
-    # Ensure space after punctuation for natural breath pauses
     t = re.sub(r'([,;:])([^\s\d])', r'\1 \2', t)
-    # Replace em-dashes and double hyphens with natural spoken pause commas
     t = re.sub(r'\s*—\s*', ', ', t)
     t = re.sub(r'\s*--\s*', ', ', t)
-    # Clean multiple exclamation or question marks while retaining intonation
     t = re.sub(r'!{2,}', '!', t)
     t = re.sub(r'\?{2,}', '?', t)
-    # Remove redundant whitespace
     t = re.sub(r'[ \t]+', ' ', t)
     return t
+
+
+def log_msg(msg: str):
+    try:
+        sys.stderr.write(f"{msg}\n")
+        sys.stderr.flush()
+    except Exception:
+        pass
 
 
 def compute_acoustic_params(
@@ -176,19 +170,15 @@ def compute_acoustic_params(
     vb_rate = voice_bias.get("rate_bias", 0) if voice_bias else 0
     vb_vol = voice_bias.get("volume_bias", 0) if voice_bias else 0
 
-    # Effective rate (-50% to +100%)
     eff_rate = int(round(user_speed + vb_rate))
     eff_rate = max(-50, min(100, eff_rate))
 
-    # Effective pitch (-40Hz to +40Hz)
     eff_pitch = int(round(user_pitch + vb_pitch))
     eff_pitch = max(-40, min(40, eff_pitch))
 
-    # Effective volume (-50% to +50%)
     eff_vol = int(round(vb_vol))
     eff_vol = max(-50, min(50, eff_vol))
 
-    # Effective pause duration between sentences (0.05s to 1.2s)
     if user_pause is not None and user_pause > 0:
         eff_pause = float(user_pause)
     else:
@@ -213,7 +203,6 @@ def resolve_neural_voice(reference_wav_path: str, language: str = "en") -> tuple
 
     # 1. Exact or partial match from the 120-Voice Studio Registry
     if VOICES_REGISTRY:
-        # Pass A: exact filename match
         for item in VOICES_REGISTRY:
             if item.get("filename", "").lower() == basename:
                 try:
@@ -235,7 +224,6 @@ def resolve_neural_voice(reference_wav_path: str, language: str = "en") -> tuple
                 }
                 return item["neuralVoice"], bias
 
-        # Pass B: key phrase match in basename
         for item in VOICES_REGISTRY:
             clean_name = item.get("name", "").lower()
             clean_id = item.get("id", "").lower()
@@ -278,164 +266,9 @@ def resolve_neural_voice(reference_wav_path: str, language: str = "en") -> tuple
     return LANGUAGE_VOICE_MAP.get(language[:2].lower(), "en-US-BrianMultilingualNeural"), {}
 
 
-def post_process_human_audio(wav_path: str):
+def split_text_into_chunks(text: str, max_chars: int = 1600) -> list:
     """
-    Studio-grade mastering for ultra-human audio:
-    1. Removes DC offset
-    2. Broadcast peak normalization (-1.0 dBFS) to eliminate distortion
-    3. Micro-fades at chunk boundaries (8ms) to remove digital pops/clicks
-    """
-    try:
-        data, sr = sf.read(wav_path)
-        if len(data) == 0:
-            return
-
-        # DC offset correction
-        data = data - np.mean(data)
-
-        # Broadcast Peak Normalization (-1.0 dBFS = 0.891 amplitude)
-        peak = np.max(np.abs(data))
-        if peak > 0.01:
-            data = data * (0.891 / peak)
-
-        # 8ms raised-cosine micro fade-in and fade-out to prevent clicks
-        fade_len = min(int(sr * 0.008), len(data) // 2)
-        if fade_len > 0:
-            fade = np.linspace(0, 1, fade_len)
-            if data.ndim == 1:
-                data[:fade_len] *= fade
-                data[-fade_len:] *= fade[::-1]
-            else:
-                for ch in range(data.shape[1]):
-                    data[:fade_len, ch] *= fade
-                    data[-fade_len:, ch] *= fade[::-1]
-
-        sf.write(wav_path, data, sr, subtype="PCM_16")
-    except Exception as e:
-        print(f"[POST-PROCESS NOTICE] {e}")
-
-
-def convert_wav_to_mp3(wav_path: str, mp3_path: str, bitrate: str = "192k") -> bool:
-    """
-    Converts a mastered 16-bit PCM WAV audio file to broadcast-quality MP3 (192kbps).
-    Uses FFmpeg as primary engine, with soundfile and pydub fallback.
-    """
-    # 1. Primary: FFmpeg (ensures industry standard libmp3lame 192kbps broadcast encoding)
-    if shutil.which("ffmpeg"):
-        try:
-            cmd = [
-                "ffmpeg", "-y",
-                "-i", wav_path,
-                "-codec:a", "libmp3lame",
-                "-b:a", bitrate,
-                "-ar", "24000",
-                mp3_path
-            ]
-            res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-            if res.returncode == 0 and os.path.isfile(mp3_path) and os.path.getsize(mp3_path) > 0:
-                return True
-        except Exception as e:
-            print(f"[MP3 CONVERSION NOTICE] FFmpeg encoder notice: {e}")
-
-    # 2. Secondary: soundfile if MP3 format is supported by libsndfile
-    try:
-        data, sr = sf.read(wav_path)
-        sf.write(mp3_path, data, sr, format="MP3")
-        if os.path.isfile(mp3_path) and os.path.getsize(mp3_path) > 0:
-            return True
-    except Exception as e:
-        print(f"[MP3 CONVERSION NOTICE] soundfile encoder notice: {e}")
-
-    # 3. Tertiary: pydub fallback
-    try:
-        from pydub import AudioSegment
-        sound = AudioSegment.from_wav(wav_path)
-        sound.export(mp3_path, format="mp3", bitrate=bitrate)
-        if os.path.isfile(mp3_path) and os.path.getsize(mp3_path) > 0:
-            return True
-    except Exception as e:
-        print(f"[MP3 CONVERSION NOTICE] pydub fallback notice: {e}")
-
-    # 4. Fallback copy
-    try:
-        shutil.copyfile(wav_path, mp3_path)
-        return True
-    except Exception as e:
-        print(f"[MP3 CONVERSION ERROR] Fallback copy failed: {e}")
-        return False
-
-
-def finalize_output_file(synthesis_wav: str, target_output: str):
-    """
-    Delivers audio to target_output. If target_output is .mp3, encodes to 192k MP3
-    and removes intermediate temporary WAV file.
-    """
-    if target_output.lower().endswith(".mp3"):
-        print(f"[AUDIO EXPORT] Mastering & encoding broadcast MP3 (192kbps): {target_output}")
-        success = convert_wav_to_mp3(synthesis_wav, target_output, bitrate="192k")
-        if not success or not os.path.isfile(target_output) or os.path.getsize(target_output) == 0:
-            shutil.copyfile(synthesis_wav, target_output)
-        if os.path.isfile(synthesis_wav) and os.path.abspath(synthesis_wav) != os.path.abspath(target_output):
-            try:
-                os.remove(synthesis_wav)
-            except Exception:
-                pass
-    else:
-        if os.path.abspath(synthesis_wav) != os.path.abspath(target_output):
-            shutil.move(synthesis_wav, target_output)
-
-
-async def generate_edge_neural_tts(
-    text: str,
-    voice_id: str,
-    output_wav_path: str,
-    rate: str = "+0%",
-    pitch: str = "+0Hz",
-    volume: str = "+0%"
-):
-    """
-    Synthesizes speech using Microsoft Neural Voice technology via edge-tts,
-    with full acoustic emotion modulation (rate, pitch, volume).
-    Converts output directly into studio 16-bit PCM WAV with post-processing.
-    """
-    temp_dir = tempfile.mkdtemp(prefix="neural_tts_")
-    temp_mp3 = os.path.join(temp_dir, "speech.mp3")
-
-    try:
-        communicate = edge_tts.Communicate(
-            text=text,
-            voice=voice_id,
-            rate=rate,
-            pitch=pitch,
-            volume=volume
-        )
-        await communicate.save(temp_mp3)
-
-        if not os.path.isfile(temp_mp3) or os.path.getsize(temp_mp3) == 0:
-            raise RuntimeError("Edge-TTS synthesis failed: Empty audio output generated.")
-
-        # Convert to 16-bit PCM standard WAV using soundfile (with FFmpeg fallback)
-        try:
-            audio_data, sample_rate = sf.read(temp_mp3)
-            sf.write(output_wav_path, audio_data, sample_rate, subtype="PCM_16")
-        except Exception as sf_err:
-            if shutil.which("ffmpeg"):
-                cmd = ["ffmpeg", "-y", "-i", temp_mp3, "-acodec", "pcm_s16le", "-ar", "24000", output_wav_path]
-                subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            else:
-                raise sf_err
-
-        # Apply studio mastering
-        post_process_human_audio(output_wav_path)
-
-    finally:
-        shutil.rmtree(temp_dir, ignore_errors=True)
-
-
-def split_text_into_chunks(text: str, max_chars: int = 320) -> list:
-    """
-    Splits long scripts into natural sentence-level chunks, respecting punctuation
-    and paragraph breaks to prevent memory overflow and guarantee smooth human pacing.
+    Splits very long scripts into natural sentence-level chunks when needed.
     """
     text = text.strip()
     if len(text) <= max_chars:
@@ -478,64 +311,32 @@ def split_text_into_chunks(text: str, max_chars: int = 320) -> list:
     return [c for c in chunks if c.strip()]
 
 
-def merge_wav_files(wav_paths: list, output_path: str, silence_duration_sec: float = 0.22):
+def concat_mp3_files(mp3_paths: list, output_path: str):
     """
-    Merges multiple WAV chunks into a single studio mastered WAV file.
-    Applies crossfading at chunk boundaries and inserts natural sentence pauses.
+    Concatenates multiple MP3 files into a single valid MP3 stream.
+    MP3 files consist of independent MPEG audio frames and concatenate seamlessly.
     """
-    if not wav_paths:
-        raise ValueError("No WAV files provided to merge.")
-
-    if len(wav_paths) == 1:
-        shutil.copyfile(wav_paths[0], output_path)
-        post_process_human_audio(output_path)
-        return
-
-    all_audio = []
-    sample_rate = 24000
-
-    for idx, path in enumerate(wav_paths):
-        data, sr = sf.read(path)
-        sample_rate = sr
-
-        # Apply gentle 5ms edge fade on each chunk
-        fade_len = min(int(sr * 0.005), len(data) // 2)
-        if fade_len > 0:
-            fade = np.linspace(0, 1, fade_len)
-            data[:fade_len] *= fade
-            data[-fade_len:] *= fade[::-1]
-
-        all_audio.append(data)
-
-        # Insert natural sentence breath pause
-        if idx < len(wav_paths) - 1 and silence_duration_sec > 0:
-            silence_samples = int(sr * silence_duration_sec)
-            all_audio.append(np.zeros(silence_samples, dtype=np.float32))
-
-    merged = np.concatenate(all_audio)
-
-    # Master post-processing: remove DC bias and normalize peak
-    merged = merged - np.mean(merged)
-    peak = np.max(np.abs(merged))
-    if peak > 0.01:
-        merged = merged * (0.891 / peak)
-
-    sf.write(output_path, merged, sample_rate, subtype="PCM_16")
+    with open(output_path, "wb") as outfile:
+        for p in mp3_paths:
+            if os.path.isfile(p):
+                with open(p, "rb") as infile:
+                    shutil.copyfileobj(infile, outfile)
 
 
 def generate_windows_native_tts_fallback(text: str, output_path: str):
     """
-    Emergency offline fallback using System.Speech.Synthesis if no neural engine
-    is installed or accessible.
+    Emergency offline fallback using System.Speech.Synthesis + ffmpeg if no neural engine
+    is accessible.
     """
     clean_text = text.replace('"', " ").replace("'", " ").replace("`", " ").strip()
-    escaped_output = output_path.replace("'", "''")
+    temp_wav = output_path + ".temp.wav"
+    escaped_wav = temp_wav.replace("'", "''")
 
     ps_command = (
         f"[void][System.Reflection.Assembly]::LoadWithPartialName('System.Speech'); "
         f"$synth = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
-        f"$synth.SetOutputToWaveFile('{escaped_output}'); "
-        f"$synth.Speak('{clean_text}'); "
+        f"$synth.SetOutputToWaveFile('{escaped_wav}'); "
+        f"$synth.Speak('{clean_text[:600]}'); "
         f"$synth.Dispose()"
     )
 
@@ -545,20 +346,210 @@ def generate_windows_native_tts_fallback(text: str, output_path: str):
         text=True
     )
 
-    if result.returncode != 0:
+    if os.path.isfile(temp_wav) and os.path.getsize(temp_wav) > 0:
+        # Convert to mp3 via ffmpeg
+        try:
+            conv = subprocess.run(
+                ["ffmpeg", "-y", "-i", temp_wav, "-b:a", "192k", output_path],
+                capture_output=True
+            )
+            if conv.returncode == 0 and os.path.isfile(output_path) and os.path.getsize(output_path) > 0:
+                try:
+                    os.unlink(temp_wav)
+                except:
+                    pass
+                return
+        except Exception:
+            pass
+        # If ffmpeg wasn't possible, move directly
+        shutil.move(temp_wav, output_path)
+    elif result.returncode != 0:
         raise RuntimeError(f"Windows Native TTS error: {result.stderr or result.stdout}")
+
+
+async def synthesize_speech_async(
+    text: str,
+    reference_wav_path: str,
+    language: str,
+    output_file_path: str,
+    options: dict = None
+) -> dict:
+    """
+    High-performance async speech synthesis engine:
+    1. Direct MP3 streaming for instant output (sub-2s)
+    2. Concurrent chunk synthesis for long texts
+    3. Lazy-loaded Coqui fallback only for custom voice samples
+    4. Emergency Windows Native TTS fallback
+    """
+    t_start = time.time()
+    if options is None:
+        options = {}
+
+    user_speed = int(options.get("speed", -8))
+    user_pitch = int(options.get("pitch", -4))
+    user_pause = options.get("pause", 0.22)
+    if user_pause is not None:
+        try:
+            user_pause = float(user_pause)
+        except:
+            user_pause = 0.22
+
+    # Humanize script text
+    clean_text = humanize_script_text(text)
+    if not clean_text:
+        raise ValueError("Text input is empty.")
+
+    # Resolve target neural voice & voice bias
+    neural_voice_id, voice_bias = resolve_neural_voice(reference_wav_path, language)
+    rate_str, pitch_str, vol_str, eff_pause = compute_acoustic_params(
+        user_speed=user_speed,
+        user_pitch=user_pitch,
+        user_pause=user_pause,
+        voice_bias=voice_bias
+    )
+
+    # Check if custom voice cloning via Coqui is required
+    ref_basename = os.path.basename(reference_wav_path).lower()
+    known_presets = ["adam", "jenny", "guy", "aria", "christopher", "sonia", "ryan", "brian", "andrew", "default"]
+    is_in_registry = any(
+        ref_basename == item.get("filename", "").lower() or
+        item.get("id", "").lower() in ref_basename or
+        item.get("name", "").lower() in ref_basename
+        for item in VOICES_REGISTRY
+    )
+    is_custom_cloning = not is_in_registry and not any(k in ref_basename for k in known_presets)
+
+    global HAS_COQUI
+    if HAS_COQUI is None:
+        try:
+            import importlib.util
+            HAS_COQUI = importlib.util.find_spec("TTS") is not None
+        except Exception:
+            HAS_COQUI = False
+
+    if is_custom_cloning and HAS_COQUI:
+        try:
+            log_msg("[ENGINE] Attempting Coqui XTTS-v2 for custom uploaded voice...")
+            # Lazy import torch & TTS only when custom voice cloning is explicitly requested
+            import torch
+            from TTS.api import TTS
+            use_cuda = torch.cuda.is_available()
+            device = "cuda" if use_cuda else "cpu"
+            tts = TTS(model_name="tts_models/multilingual/multi-dataset/xtts_v2", progress_bar=False).to(device)
+            tts.tts_to_file(
+                text=clean_text[:400],
+                speaker_wav=reference_wav_path,
+                language=language[:2].lower(),
+                file_path=output_file_path
+            )
+            if os.path.isfile(output_file_path) and os.path.getsize(output_file_path) > 0:
+                return {
+                    "success": True,
+                    "engine": "coqui_xtts",
+                    "voice": "custom_clone",
+                    "time": f"{time.time() - t_start:.2f}s"
+                }
+        except Exception as e:
+            log_msg(f"[COQUI NOTICE] Custom cloning fallback to Neural Voice: {e}")
+
+    # Primary: Fast Neural Speech Engine via edge-tts
+    if HAS_EDGE_TTS:
+        os.makedirs(os.path.dirname(os.path.abspath(output_file_path)), exist_ok=True)
+
+        # For text under 2500 chars (99% of requests), generate in a single fast stream with retry & strict timeout
+        if len(clean_text) <= 2500:
+            saved_ok = False
+            last_err = None
+            for attempt in range(2):
+                try:
+                    comm = edge_tts.Communicate(
+                        text=clean_text,
+                        voice=neural_voice_id,
+                        rate=rate_str,
+                        pitch=pitch_str,
+                        volume=vol_str
+                    )
+                    # Strict 10-second timeout prevents indefinite cloud websocket hangs
+                    await asyncio.wait_for(comm.save(output_file_path), timeout=10.0)
+                    if os.path.isfile(output_file_path) and os.path.getsize(output_file_path) > 0:
+                        saved_ok = True
+                        break
+                except Exception as e:
+                    last_err = e
+                    log_msg(f"[EDGE-TTS Notice] Cloud connection attempt {attempt + 1} notice: {e}. Retrying...")
+                    await asyncio.sleep(0.2)
+
+            if saved_ok:
+                elapsed = time.time() - t_start
+                return {
+                    "success": True,
+                    "engine": "edge_neural",
+                    "voice": neural_voice_id,
+                    "time": f"{elapsed:.2f}s"
+                }
+            else:
+                log_msg(f"[EDGE-TTS Notice] Cloud service unavailable ({last_err}). Seamlessly falling back to offline engine...")
+        else:
+            # Long script: process sentence chunks CONCURRENTLY for maximum speed
+            chunks = split_text_into_chunks(clean_text, max_chars=1600)
+            temp_dir = tempfile.mkdtemp(prefix="fast_tts_chunks_")
+            chunk_files = [os.path.join(temp_dir, f"chunk_{i:04d}.mp3") for i in range(len(chunks))]
+
+            async def fetch_chunk(c_text, c_path):
+                c = edge_tts.Communicate(
+                    text=c_text,
+                    voice=neural_voice_id,
+                    rate=rate_str,
+                    pitch=pitch_str,
+                    volume=vol_str
+                )
+                await asyncio.wait_for(c.save(c_path), timeout=15.0)
+
+            try:
+                tasks = [fetch_chunk(chunks[i], chunk_files[i]) for i in range(len(chunks))]
+                await asyncio.gather(*tasks)
+
+                concat_mp3_files(chunk_files, output_file_path)
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+                if os.path.isfile(output_file_path) and os.path.getsize(output_file_path) > 0:
+                    elapsed = time.time() - t_start
+                    return {
+                        "success": True,
+                        "engine": "edge_neural_multichunk",
+                        "voice": neural_voice_id,
+                        "chunks": len(chunks),
+                        "time": f"{elapsed:.2f}s"
+                    }
+            except Exception as chunk_err:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+                log_msg(f"[EDGE-TTS Multichunk Notice]: {chunk_err}. Falling back to offline synthesizer...")
+
+    # Fallback: Windows Native TTS
+    if sys.platform == "win32":
+        log_msg("[NOTICE] Using Emergency Windows Native Fallback.")
+        try:
+            generate_windows_native_tts_fallback(clean_text, output_file_path)
+            if os.path.isfile(output_file_path) and os.path.getsize(output_file_path) > 0:
+                return {
+                    "success": True,
+                    "engine": "windows_native",
+                    "voice": "System.Speech (Offline Fallback)",
+                    "time": f"{time.time() - t_start:.2f}s"
+                }
+        except Exception as fb_err:
+            log_msg(f"[FALLBACK ERROR]: {fb_err}")
+
+    raise RuntimeError("Speech synthesis failed on all available engines.")
 
 
 def main():
     """
     AI Voice Engine CLI Runner
-    Supports:
-    1. Edge Neural Human Voice Engine with Acoustic Emotion & Adam Suite Modulation
-    2. Coqui XTTS-v2 Voice Cloning
-    3. Windows Native Fallback
+    Usage: python tts_runner.py "<text or path_to_text>" "<reference_wav>" [lang] [output_path] [options_json]
     """
     if len(sys.argv) < 3:
-        sys.stderr.write("Usage: python tts_runner.py \"<text or path_to_text_file>\" \"<path_to_reference_wav>\" [language_code] [output_path] [options_json_or_path]\n")
+        sys.stderr.write("Usage: python tts_runner.py \"<text or path_to_text>\" \"<reference_wav>\" [lang] [output_path] [options_json]\n")
         sys.exit(1)
 
     raw_arg = sys.argv[1].strip()
@@ -576,191 +567,36 @@ def main():
         sys.stderr.write("Error: Text input is empty.\n")
         sys.exit(1)
 
-    # Humanize punctuation and cadence
-    text_input = humanize_script_text(text_input)
-
-    if not os.path.isfile(reference_wav_path):
-        sys.stderr.write(f"Error: Reference voice file not found at '{reference_wav_path}'.\n")
-        sys.exit(1)
-
-    # Determine destination output path
     project_root = os.path.dirname(os.path.abspath(__file__))
     if len(sys.argv) > 4 and sys.argv[4].strip():
         output_file_path = os.path.abspath(sys.argv[4].strip())
-        os.makedirs(os.path.dirname(output_file_path), exist_ok=True)
     else:
         output_file_path = os.path.join(project_root, "output.mp3")
 
-    # If target is MP3, synthesize and master into temporary WAV first
-    if output_file_path.lower().endswith(".mp3"):
-        synthesis_wav_path = os.path.join(
-            tempfile.gettempdir(),
-            f"tts_master_{int(time.time() * 1000)}_{os.getpid()}.wav"
-        )
-    else:
-        synthesis_wav_path = output_file_path
-
-    # Parse Acoustic Modulation Options (arg 5)
-    user_speed = -8
-    user_pitch = -4
-    user_pause = None
-
+    options = {}
     if len(sys.argv) > 5 and sys.argv[5].strip():
         opts_arg = sys.argv[5].strip()
         try:
             if os.path.isfile(opts_arg):
                 with open(opts_arg, 'r', encoding='utf-8') as f:
-                    opts = json.load(f)
+                    options = json.load(f)
             else:
-                opts = json.loads(opts_arg)
-            user_speed = int(opts.get("speed", -8))
-            user_pitch = int(opts.get("pitch", -4))
-            if "pause" in opts and opts["pause"] is not None:
-                user_pause = float(opts["pause"])
-        except Exception as e:
-            print(f"[NOTICE] Using default modulation settings ({e})")
+                options = json.loads(opts_arg)
+        except Exception:
+            options = {}
 
-    # Resolve target neural voice & voice bias
-    neural_voice_id, voice_bias = resolve_neural_voice(reference_wav_path, language)
-
-    rate_str, pitch_str, vol_str, eff_pause = compute_acoustic_params(
-        user_speed=user_speed,
-        user_pitch=user_pitch,
-        user_pause=user_pause,
-        voice_bias=voice_bias
-    )
-
-    print(f"=== AI Voice Synthesis Initialized ===")
-    print(f"Text length: {len(text_input)} characters")
-    print(f"Reference voice: {os.path.basename(reference_wav_path)}")
-    if voice_bias and "label" in voice_bias:
-        print(f"Profile: {voice_bias['label']}")
-    print(f"Modulation: Rate={rate_str}, Pitch={pitch_str}, Volume={vol_str}, Pause={eff_pause:.2f}s")
-    print(f"Target output: {output_file_path}")
-
-    # =========================================================================
-    # OPTION A: COQUI XTTS-v2 (If custom user voice cloning is requested and TTS available)
-    # =========================================================================
-    is_custom_cloning = False
-    ref_basename = os.path.basename(reference_wav_path).lower()
-    known_presets = ["adam", "jenny", "guy", "aria", "christopher", "sonia", "ryan", "brian", "andrew", "default"]
-    is_in_registry = any(
-        ref_basename == item.get("filename", "").lower() or
-        item.get("id", "").lower() in ref_basename or
-        item.get("name", "").lower() in ref_basename
-        for item in VOICES_REGISTRY
-    )
-    if not is_in_registry and not any(k in ref_basename for k in known_presets):
-        is_custom_cloning = True
-
-    if is_custom_cloning and HAS_COQUI:
-        try:
-            print("[ENGINE] Using Coqui XTTS-v2 Neural Voice Cloning...")
-            use_cuda = torch.cuda.is_available()
-            device = "cuda" if use_cuda else "cpu"
-            print(f"[HARDWARE] Inference device: {device.upper()}")
-
-            chunks = split_text_into_chunks(text_input, max_chars=250)
-            temp_dir = tempfile.mkdtemp(prefix="xtts_chunks_")
-            chunk_files = []
-
-            tts = TTS(model_name="tts_models/multilingual/multi-dataset/xtts_v2", progress_bar=False).to(device)
-
-            for i, chunk in enumerate(chunks, 1):
-                chunk_path = os.path.join(temp_dir, f"chunk_{i:04d}.wav")
-                tts.tts_to_file(
-                    text=chunk,
-                    speaker_wav=reference_wav_path,
-                    language=language,
-                    file_path=chunk_path
-                )
-                if os.path.isfile(chunk_path) and os.path.getsize(chunk_path) > 0:
-                    chunk_files.append(chunk_path)
-                else:
-                    raise RuntimeError(f"Failed to generate chunk {i}")
-
-            merge_wav_files(chunk_files, synthesis_wav_path, silence_duration_sec=eff_pause)
-            shutil.rmtree(temp_dir, ignore_errors=True)
-            finalize_output_file(synthesis_wav_path, output_file_path)
-
-            if os.path.isfile(output_file_path) and os.path.getsize(output_file_path) > 0:
-                print(f"SUCCESS: Voice cloned successfully via XTTS-v2: {output_file_path}")
-                sys.exit(0)
-        except Exception as e:
-            print(f"[WARNING] Coqui XTTS synthesis encountered: {e}. Falling back to Neural Voice Engine.")
-
-    # =========================================================================
-    # OPTION B: STUDIO NEURAL HUMAN VOICE ENGINE (Edge-TTS + Human Pacing)
-    # =========================================================================
-    if HAS_EDGE_TTS:
-        print(f"[ENGINE] Using Studio Neural Human Voice Engine: {neural_voice_id}")
-        print(f"[HUMAN TONE] Pacing and pitch tuning active")
-
-        try:
-            chunks = split_text_into_chunks(text_input, max_chars=320)
-            if len(chunks) == 1:
-                # Single chunk synthesis
-                asyncio.run(generate_edge_neural_tts(
-                    text=chunks[0],
-                    voice_id=neural_voice_id,
-                    output_wav_path=synthesis_wav_path,
-                    rate=rate_str,
-                    pitch=pitch_str,
-                    volume=vol_str
-                ))
-            else:
-                # Multi-chunk synthesis for long scripts with emotional sentence pauses
-                print(f"Processing long script in {len(chunks)} natural sentence chunks...")
-                temp_dir = tempfile.mkdtemp(prefix="neural_chunks_")
-                chunk_files = []
-                for i, chunk in enumerate(chunks, 1):
-                    chunk_wav = os.path.join(temp_dir, f"chunk_{i:04d}.wav")
-                    asyncio.run(generate_edge_neural_tts(
-                        text=chunk,
-                        voice_id=neural_voice_id,
-                        output_wav_path=chunk_wav,
-                        rate=rate_str,
-                        pitch=pitch_str,
-                        volume=vol_str
-                    ))
-                    if os.path.isfile(chunk_wav) and os.path.getsize(chunk_wav) > 0:
-                        chunk_files.append(chunk_wav)
-                    else:
-                        raise RuntimeError(f"Chunk {i} generation failed.")
-
-                merge_wav_files(chunk_files, synthesis_wav_path, silence_duration_sec=eff_pause)
-                shutil.rmtree(temp_dir, ignore_errors=True)
-
-            finalize_output_file(synthesis_wav_path, output_file_path)
-
-            if os.path.isfile(output_file_path) and os.path.getsize(output_file_path) > 0:
-                print(f"SUCCESS: Fully human voice generated successfully: {output_file_path}")
-                sys.exit(0)
-            else:
-                raise RuntimeError("Generated output file is missing or empty.")
-
-        except Exception as err:
-            print(f"[WARNING] Neural Voice synthesis failed: {err}")
-
-    # =========================================================================
-    # OPTION C: EMERGENCY WINDOWS NATIVE TTS (Last resort on Windows only)
-    # =========================================================================
-    if sys.platform == "win32":
-        print("[NOTICE] Using Emergency Windows Native Fallback.")
-        try:
-            generate_windows_native_tts_fallback(text_input, synthesis_wav_path)
-            finalize_output_file(synthesis_wav_path, output_file_path)
-            if os.path.isfile(output_file_path) and os.path.getsize(output_file_path) > 0:
-                print(f"SUCCESS: Generated via fallback TTS: {output_file_path}")
-                sys.exit(0)
-            else:
-                sys.stderr.write("Error: Output file not created.\n")
-                sys.exit(1)
-        except Exception as e:
-            sys.stderr.write(f"Fatal error during TTS generation: {e}\n")
-            sys.exit(1)
-    else:
-        sys.stderr.write("Voice generation failed: Neural Edge-TTS engine was unable to synthesize audio on server.\n")
+    try:
+        res = asyncio.run(synthesize_speech_async(
+            text=text_input,
+            reference_wav_path=reference_wav_path,
+            language=language,
+            output_file_path=output_file_path,
+            options=options
+        ))
+        print(f"SUCCESS: Voice generated successfully in {res.get('time', 'N/A')} [{res.get('engine', 'TTS')}]: {output_file_path}")
+        sys.exit(0)
+    except Exception as err:
+        sys.stderr.write(f"Voice generation failed: {err}\n")
         sys.exit(1)
 
 
