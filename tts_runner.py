@@ -325,33 +325,50 @@ def concat_mp3_files(mp3_paths: list, output_path: str):
 
 def generate_windows_native_tts_fallback(text: str, output_path: str):
     """
-    Emergency offline fallback using System.Speech.Synthesis + ffmpeg if no neural engine
-    is accessible.
+    Emergency offline fallback using System.Speech.Synthesis + ffmpeg with safe temporary text file.
     """
-    clean_text = text.replace('"', " ").replace("'", " ").replace("`", " ").strip()
+    temp_txt = output_path + ".temp.txt"
     temp_wav = output_path + ".temp.wav"
-    escaped_wav = temp_wav.replace("'", "''")
 
-    ps_command = (
-        f"[void][System.Reflection.Assembly]::LoadWithPartialName('System.Speech'); "
-        f"$synth = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
-        f"$synth.SetOutputToWaveFile('{escaped_wav}'); "
-        f"$synth.Speak('{clean_text[:600]}'); "
-        f"$synth.Dispose()"
-    )
+    try:
+        with open(temp_txt, "w", encoding="utf-8") as f:
+            f.write(text[:1200])
 
-    result = subprocess.run(
-        ["powershell", "-NoProfile", "-Command", ps_command],
-        capture_output=True,
-        text=True
-    )
+        escaped_txt = temp_txt.replace("'", "''")
+        escaped_wav = temp_wav.replace("'", "''")
+
+        ps_script = (
+            f"$ErrorActionPreference = 'Stop'; "
+            f"[void][System.Reflection.Assembly]::LoadWithPartialName('System.Speech'); "
+            f"$synth = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
+            f"$synth.SetOutputToWaveFile('{escaped_wav}'); "
+            f"$script = [System.IO.File]::ReadAllText('{escaped_txt}', [System.Text.Encoding]::UTF8); "
+            f"$synth.Speak($script); "
+            f"$synth.Dispose()"
+        )
+
+        subprocess.run(
+            ["powershell", "-NoProfile", "-Command", ps_script],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+    except Exception as e:
+        log_msg(f"[Windows Native TTS Exception]: {e}")
+    finally:
+        if os.path.isfile(temp_txt):
+            try:
+                os.unlink(temp_txt)
+            except:
+                pass
 
     if os.path.isfile(temp_wav) and os.path.getsize(temp_wav) > 0:
-        # Convert to mp3 via ffmpeg
+        # Convert to mp3 via ffmpeg if available
         try:
             conv = subprocess.run(
                 ["ffmpeg", "-y", "-i", temp_wav, "-b:a", "192k", output_path],
-                capture_output=True
+                capture_output=True,
+                timeout=20
             )
             if conv.returncode == 0 and os.path.isfile(output_path) and os.path.getsize(output_path) > 0:
                 try:
@@ -361,10 +378,10 @@ def generate_windows_native_tts_fallback(text: str, output_path: str):
                 return
         except Exception:
             pass
-        # If ffmpeg wasn't possible, move directly
+        # If ffmpeg wasn't available, move directly
         shutil.move(temp_wav, output_path)
-    elif result.returncode != 0:
-        raise RuntimeError(f"Windows Native TTS error: {result.stderr or result.stdout}")
+    else:
+        raise RuntimeError("Windows Native TTS was unable to synthesize audio for this prompt.")
 
 
 async def synthesize_speech_async(
@@ -456,8 +473,8 @@ async def synthesize_speech_async(
     if HAS_EDGE_TTS:
         os.makedirs(os.path.dirname(os.path.abspath(output_file_path)), exist_ok=True)
 
-        # For text under 2500 chars (99% of requests), generate in a single fast stream with retry & strict timeout
-        if len(clean_text) <= 2500:
+        # Fast path for short prompts (<= 500 chars): direct single stream with generous timeout
+        if len(clean_text) <= 500:
             saved_ok = False
             last_err = None
             for attempt in range(2):
@@ -469,15 +486,14 @@ async def synthesize_speech_async(
                         pitch=pitch_str,
                         volume=vol_str
                     )
-                    # Strict 10-second timeout prevents indefinite cloud websocket hangs
-                    await asyncio.wait_for(comm.save(output_file_path), timeout=10.0)
+                    await asyncio.wait_for(comm.save(output_file_path), timeout=35.0)
                     if os.path.isfile(output_file_path) and os.path.getsize(output_file_path) > 0:
                         saved_ok = True
                         break
                 except Exception as e:
                     last_err = e
-                    log_msg(f"[EDGE-TTS Notice] Cloud connection attempt {attempt + 1} notice: {e}. Retrying...")
-                    await asyncio.sleep(0.2)
+                    log_msg(f"[EDGE-TTS Notice] Cloud attempt {attempt + 1} notice: {e or type(e).__name__}. Retrying...")
+                    await asyncio.sleep(0.3)
 
             if saved_ok:
                 elapsed = time.time() - t_start
@@ -488,27 +504,44 @@ async def synthesize_speech_async(
                     "time": f"{elapsed:.2f}s"
                 }
             else:
-                log_msg(f"[EDGE-TTS Notice] Cloud service unavailable ({last_err}). Seamlessly falling back to offline engine...")
-        else:
-            # Long script: process sentence chunks CONCURRENTLY for maximum speed
-            chunks = split_text_into_chunks(clean_text, max_chars=1600)
-            temp_dir = tempfile.mkdtemp(prefix="fast_tts_chunks_")
-            chunk_files = [os.path.join(temp_dir, f"chunk_{i:04d}.mp3") for i in range(len(chunks))]
+                log_msg(f"[EDGE-TTS Notice] Single stream attempt failed ({last_err}). Seamlessly trying sentence chunk synthesis...")
 
-            async def fetch_chunk(c_text, c_path):
-                c = edge_tts.Communicate(
-                    text=c_text,
-                    voice=neural_voice_id,
-                    rate=rate_str,
-                    pitch=pitch_str,
-                    volume=vol_str
-                )
-                await asyncio.wait_for(c.save(c_path), timeout=15.0)
+        # Multi-chunk path for longer scripts: sequential chunk processing prevents cloud rate limiting
+        chunks = split_text_into_chunks(clean_text, max_chars=450)
+        temp_dir = tempfile.mkdtemp(prefix="fast_tts_chunks_")
+        chunk_files = []
+        all_chunks_ok = True
+        chunk_err = None
 
-            try:
-                tasks = [fetch_chunk(chunks[i], chunk_files[i]) for i in range(len(chunks))]
-                await asyncio.gather(*tasks)
+        try:
+            for i, c_text in enumerate(chunks):
+                c_path = os.path.join(temp_dir, f"chunk_{i:04d}.mp3")
+                chunk_saved = False
+                for chunk_attempt in range(2):
+                    try:
+                        c = edge_tts.Communicate(
+                            text=c_text,
+                            voice=neural_voice_id,
+                            rate=rate_str,
+                            pitch=pitch_str,
+                            volume=vol_str
+                        )
+                        await asyncio.wait_for(c.save(c_path), timeout=45.0)
+                        if os.path.isfile(c_path) and os.path.getsize(c_path) > 0:
+                            chunk_saved = True
+                            break
+                    except Exception as ce:
+                        chunk_err = ce
+                        log_msg(f"[EDGE-TTS Notice] Chunk {i + 1}/{len(chunks)} attempt {chunk_attempt + 1} error: {ce or type(ce).__name__}. Retrying...")
+                        await asyncio.sleep(0.3)
 
+                if chunk_saved:
+                    chunk_files.append(c_path)
+                else:
+                    all_chunks_ok = False
+                    break
+
+            if all_chunks_ok and chunk_files:
                 concat_mp3_files(chunk_files, output_file_path)
                 shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -521,9 +554,12 @@ async def synthesize_speech_async(
                         "chunks": len(chunks),
                         "time": f"{elapsed:.2f}s"
                     }
-            except Exception as chunk_err:
+            else:
                 shutil.rmtree(temp_dir, ignore_errors=True)
-                log_msg(f"[EDGE-TTS Multichunk Notice]: {chunk_err}. Falling back to offline synthesizer...")
+                log_msg(f"[EDGE-TTS Multichunk Notice]: {chunk_err or 'Chunk generation failed'}. Falling back to offline synthesizer...")
+        except Exception as e:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            log_msg(f"[EDGE-TTS Multichunk Notice]: {e}. Falling back to offline synthesizer...")
 
     # Fallback: Windows Native TTS
     if sys.platform == "win32":

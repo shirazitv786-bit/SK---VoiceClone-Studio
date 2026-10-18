@@ -210,8 +210,11 @@ const runDirectRunner = ({ id, text, referenceVoicePath, language, targetAudioPa
       tempOptionsPath
     ];
 
+    const runnerTimeoutMs = Math.max(120000, Math.min(300000, Math.ceil((text || '').length * 80)));
     const execOptions = {
       cwd: __dirname,
+      timeout: runnerTimeoutMs,
+      maxBuffer: 10 * 1024 * 1024,
       env: {
         ...process.env,
         COQUI_TOS_AGREED: '1',
@@ -229,7 +232,12 @@ const runDirectRunner = ({ id, text, referenceVoicePath, language, targetAudioPa
       }
 
       if (error) {
-        return reject(new Error(stderr || error.message));
+        let cleanErr = stderr || error.message;
+        const failMatch = stderr && stderr.match(/Voice generation failed:\s*(.+)/);
+        if (failMatch && failMatch[1]) {
+          cleanErr = failMatch[1].trim();
+        }
+        return reject(new Error(cleanErr));
       }
       resolve({ success: true, stdout, time: 'fallback' });
     });
@@ -245,18 +253,19 @@ const synthesizeSpeech = ({ id, text, referenceVoicePath, language, targetAudioP
     return new Promise((resolve, reject) => {
       let settled = false;
 
-      // 20-second threshold: if worker ever stalls, automatically trigger direct execution
+      // Dynamic safety timeout proportional to script length (minimum 120s, up to 300s for large scripts)
+      const workerTimeoutMs = Math.max(120000, Math.min(300000, Math.ceil((text || '').length * 80)));
       const timeoutId = setTimeout(() => {
         if (settled) return;
         settled = true;
         if (pendingWorkerRequests.has(id)) {
           pendingWorkerRequests.delete(id);
         }
-        console.warn(`[TTS Engine] Worker took >20s for ${id}. Seamlessly recovering via direct runner...`);
+        console.warn(`[TTS Engine] Worker took >${workerTimeoutMs / 1000}s for ${id}. Seamlessly recovering via direct runner...`);
         runDirectRunner({ id, text, referenceVoicePath, language, targetAudioPath, options })
           .then(resolve)
           .catch(reject);
-      }, 20000);
+      }, workerTimeoutMs);
 
       pendingWorkerRequests.set(id, {
         resolve: (val) => {
