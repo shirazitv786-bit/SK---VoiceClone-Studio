@@ -31,8 +31,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy all application files before npm install so postinstall build succeeds
 COPY . .
 
-# Install Node dependencies (postinstall automatically builds frontend/dist)
+# Install Node dependencies and generate Prisma Client
 RUN npm install
+RUN npx prisma generate
 
 # Build frontend production bundle
 RUN npm run build

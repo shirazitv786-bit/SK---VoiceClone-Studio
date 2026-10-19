@@ -102,9 +102,15 @@ router.post('/register', async (req, res) => {
     });
   } catch (err) {
     console.error('[Auth Error - Register]:', err);
+    let userMessage = 'An internal error occurred while registering. Please try again.';
+    if (err.code === 'P2002') {
+      userMessage = 'This email address is already registered. Please sign in instead.';
+    } else if (err.message && (err.message.includes('reach database') || err.message.includes('P1001') || err.message.includes('connect'))) {
+      userMessage = 'Database service temporarily unavailable. Please retry in a few seconds.';
+    }
     return res.status(500).json({
       success: false,
-      error: 'An internal error occurred while registering. Please try again.'
+      error: userMessage
     });
   }
 });
@@ -182,9 +188,13 @@ router.post('/login', async (req, res) => {
     });
   } catch (err) {
     console.error('[Auth Error - Login]:', err);
+    let userMessage = 'An unexpected error occurred during login. Please try again.';
+    if (err.message && (err.message.includes('reach database') || err.message.includes('P1001') || err.message.includes('connect'))) {
+      userMessage = 'Database service temporarily unavailable. Please retry in a few seconds.';
+    }
     return res.status(500).json({
       success: false,
-      error: 'An unexpected error occurred during login. Please try again.'
+      error: userMessage
     });
   }
 });

@@ -18,6 +18,9 @@ const { initScheduledCleanup, cleanupOldAudioFiles } = require('./utils/storageC
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Security: Enable reverse proxy support for Railway / Cloudflare / Nginx (resolves true client IP)
+app.set('trust proxy', 1);
+
 // Security: Disable X-Powered-By to prevent technology stack disclosure
 app.disable('x-powered-by');
 
@@ -43,19 +46,22 @@ app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 // 4. Rate Limiting Protection (DDoS and brute-force mitigations)
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 500,
+  max: 1000,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { trustProxy: false },
   message: { success: false, error: 'Rate limit exceeded. Please try again later.' }
 });
 app.use('/api', apiLimiter);
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 20,
+  max: 100, // 100 attempts per 15 minutes per unique client IP
+  skipSuccessfulRequests: true, // Legitimate logins do not consume limit
   standardHeaders: true,
   legacyHeaders: false,
-  message: { success: false, error: 'Too many authentication attempts. Please wait 15 minutes.' }
+  validate: { trustProxy: false },
+  message: { success: false, error: 'Too many authentication attempts from this IP. Please wait a few minutes and try again.' }
 });
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
@@ -1069,6 +1075,30 @@ app.use((err, req, res, next) => {
   next();
 });
 
+/**
+ * Ensures the PostgreSQL database schema and tables exist on startup.
+ * Automatically runs prisma db push if tables are not detected (e.g. initial Railway deployment).
+ */
+async function ensureDatabaseSchema() {
+  try {
+    await prisma.user.findFirst({ select: { id: true } });
+    console.log('[Database] PostgreSQL schema verified: tables operational.');
+  } catch (err) {
+    if (err.message && (err.message.includes('does not exist') || err.message.includes('P2021') || err.message.includes('relation'))) {
+      console.log('[Database] PostgreSQL tables missing. Synchronizing schema via prisma db push...');
+      try {
+        const { execSync } = require('child_process');
+        execSync('npx prisma db push --accept-data-loss', { stdio: 'inherit' });
+        console.log('[Database] Schema successfully synchronized with PostgreSQL!');
+      } catch (pushErr) {
+        console.error('[Database Migration Error]:', pushErr.message);
+      }
+    } else {
+      console.warn('[Database Connectivity Note]:', err.message);
+    }
+  }
+}
+
 // Start the Express server
 const server = app.listen(PORT, async () => {
   console.log(`===============================================`);
@@ -1078,6 +1108,9 @@ const server = app.listen(PORT, async () => {
   console.log(` Audio output directory: ${audioDir}`);
   console.log(` Python executable: ${getPythonExecutable()}`);
   console.log(`===============================================`);
+
+  // Ensure database schema and tables exist in PostgreSQL
+  await ensureDatabaseSchema();
 
   // Ensure superadmin account and default settings exist
   await bootstrapSuperadmin();

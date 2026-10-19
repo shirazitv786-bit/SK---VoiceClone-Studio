@@ -13,12 +13,14 @@
     "install": {
       "commands": [
         "npm install",
+        "npx prisma generate",
         "python3 -m pip install -r requirements.txt"
       ]
     },
     "build": {
       "inputs": [{ "step": "install" }],
       "commands": [
+        "npx prisma generate",
         "npm run build"
       ]
     }

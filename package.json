@@ -8,8 +8,8 @@
     "server": "nodemon server.js",
     "client": "npm run dev --prefix frontend",
     "dev": "concurrently -n \"SERVER,CLIENT\" -c \"blue,magenta\" \"npm run server\" \"npm run client\"",
-    "build": "npm install --prefix frontend && npm run build --prefix frontend",
-    "postinstall": "npm install --prefix frontend && npm run build --prefix frontend"
+    "build": "prisma generate && npm install --prefix frontend && npm run build --prefix frontend",
+    "postinstall": "prisma generate && npm install --prefix frontend && npm run build --prefix frontend"
   },
   "dependencies": {
     "@prisma/client": "6.4.1",
@@ -20,11 +20,11 @@
     "express-rate-limit": "^8.7.1",
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
-    "multer": "^1.4.5-lts.2"
+    "multer": "^1.4.5-lts.2",
+    "prisma": "6.4.1"
   },
   "devDependencies": {
     "concurrently": "^10.0.6",
-    "nodemon": "^3.1.0",
-    "prisma": "6.4.1"
+    "nodemon": "^3.1.0"
   }
 }

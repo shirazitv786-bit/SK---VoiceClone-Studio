@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
-// Backend API URL
-const API_BASE = typeof window !== 'undefined' && window.location.port === '5173' ? 'http://localhost:5000' : '';
+// Backend API URL (Supports local dev port 5173 and production deployment)
+const API_BASE = typeof window !== 'undefined' && window.location.port === '5173'
+  ? (import.meta.env?.VITE_API_BASE || 'http://localhost:5000')
+  : (import.meta.env?.VITE_API_BASE || '');
 
 export default function AuthModal({
   isOpen,
