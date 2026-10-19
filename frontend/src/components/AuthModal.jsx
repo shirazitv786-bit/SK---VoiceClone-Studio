@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
-// Backend API URL (Supports local dev port 5173 and production deployment)
-const API_BASE = typeof window !== 'undefined' && window.location.port === '5173'
+// Backend API URL (Supports local dev ports e.g. 5173/5174 and same-origin production deployments)
+const isLocalDev = typeof window !== 'undefined' && 
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && 
+  window.location.port !== '5000' && window.location.port !== '';
+
+const API_BASE = isLocalDev
   ? (import.meta.env?.VITE_API_BASE || 'http://localhost:5000')
   : (import.meta.env?.VITE_API_BASE || '');
 
@@ -111,8 +115,9 @@ export default function AuthModal({
     } catch (err) {
       console.error('[Auth Error]:', err);
       const serverMsg = err.response?.data?.error;
+      const detailsMsg = err.response?.data?.details;
       const networkMsg = err.message || 'Unable to connect to authentication server.';
-      setError(serverMsg || networkMsg);
+      setError(serverMsg ? (detailsMsg ? `${serverMsg} (${detailsMsg})` : serverMsg) : networkMsg);
     } finally {
       setLoading(false);
     }

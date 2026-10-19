@@ -1077,24 +1077,40 @@ app.use((err, req, res, next) => {
 
 /**
  * Ensures the PostgreSQL database schema and tables exist on startup.
+ * Includes retries to accommodate container boot and network proxy latency.
  * Automatically runs prisma db push if tables are not detected (e.g. initial Railway deployment).
  */
 async function ensureDatabaseSchema() {
-  try {
-    await prisma.user.findFirst({ select: { id: true } });
-    console.log('[Database] PostgreSQL schema verified: tables operational.');
-  } catch (err) {
-    if (err.message && (err.message.includes('does not exist') || err.message.includes('P2021') || err.message.includes('relation'))) {
-      console.log('[Database] PostgreSQL tables missing. Synchronizing schema via prisma db push...');
-      try {
-        const { execSync } = require('child_process');
-        execSync('npx prisma db push --accept-data-loss', { stdio: 'inherit' });
-        console.log('[Database] Schema successfully synchronized with PostgreSQL!');
-      } catch (pushErr) {
-        console.error('[Database Migration Error]:', pushErr.message);
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await prisma.user.findFirst({ select: { id: true } });
+      console.log('[Database] PostgreSQL schema verified: tables operational.');
+      return;
+    } catch (err) {
+      const isMissingTables = err.message && (
+        err.message.includes('does not exist') || 
+        err.message.includes('P2021') || 
+        err.message.includes('relation')
+      );
+
+      if (isMissingTables) {
+        console.log('[Database] PostgreSQL tables missing. Synchronizing schema via prisma db push...');
+        try {
+          const { execSync } = require('child_process');
+          execSync('npx prisma db push --accept-data-loss', { stdio: 'inherit' });
+          console.log('[Database] Schema successfully synchronized with PostgreSQL!');
+          return;
+        } catch (pushErr) {
+          console.error('[Database Migration Error]:', pushErr.message);
+        }
+      } else {
+        console.warn(`[Database Connectivity Attempt ${attempt}/${maxAttempts}]:`, err.message);
+        if (attempt < maxAttempts) {
+          console.log('[Database] Retrying database connection in 2 seconds...');
+          await new Promise(r => setTimeout(r, 2000));
+        }
       }
-    } else {
-      console.warn('[Database Connectivity Note]:', err.message);
     }
   }
 }

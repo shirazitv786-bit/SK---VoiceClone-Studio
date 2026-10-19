@@ -1,6 +1,11 @@
 {
   "watch": [
     "server.js",
+    "prismaClient.js",
+    "bootstrapSuperadmin.js",
+    "routes/*",
+    "middleware/*",
+    "utils/*",
     "tts_worker.py",
     "tts_runner.py"
   ],

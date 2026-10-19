@@ -52,10 +52,24 @@ router.post('/register', async (req, res) => {
     const cleanName = name.trim().slice(0, 80);
     const cleanEmail = email.trim().toLowerCase();
 
-    // 2. Check if Email Already Exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email: cleanEmail }
-    });
+    // 2. Check if Email Already Exists (with retry for transient network drops)
+    let existingUser = null;
+    let checkErr = null;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        existingUser = await prisma.user.findUnique({
+          where: { email: cleanEmail }
+        });
+        checkErr = null;
+        break;
+      } catch (err) {
+        checkErr = err;
+        if (attempt === 1) {
+          await new Promise(r => setTimeout(r, 600));
+        }
+      }
+    }
+    if (checkErr) throw checkErr;
 
     if (existingUser) {
       return res.status(409).json({
@@ -103,14 +117,30 @@ router.post('/register', async (req, res) => {
   } catch (err) {
     console.error('[Auth Error - Register]:', err);
     let userMessage = 'An internal error occurred while registering. Please try again.';
-    if (err.code === 'P2002') {
-      userMessage = 'This email address is already registered. Please sign in instead.';
-    } else if (err.message && (err.message.includes('reach database') || err.message.includes('P1001') || err.message.includes('connect'))) {
-      userMessage = 'Database service temporarily unavailable. Please retry in a few seconds.';
+    const msg = (err.message || '').toLowerCase();
+    const code = err.code || '';
+
+    if (code === 'P2002') {
+      return res.status(409).json({
+        success: false,
+        error: 'This email address is already registered. Please sign in instead.'
+      });
+    } else if (code === 'P1001' || code === 'P1002' || code === 'P1008' || code === 'P1017' || code === 'P2024' ||
+               msg.includes('reach database') || msg.includes('etimedout') || msg.includes('timeout') ||
+               msg.includes('connection terminated') || msg.includes('closed unexpectedly') || msg.includes('connect')) {
+      userMessage = 'Database service connection timed out. Please retry in a few seconds.';
+    } else if (code === 'P1000' || msg.includes('authentication failed against database')) {
+      userMessage = 'Database authentication error. Please verify backend database credentials.';
+    } else if (code === 'P2021' || msg.includes('does not exist') || msg.includes('relation')) {
+      userMessage = 'Database tables are currently initializing. Please retry in a few moments.';
+    } else if (msg.includes('database_url') || msg.includes('nonempty url')) {
+      userMessage = 'Database connection is not configured on the server. Please check DATABASE_URL.';
     }
+
     return res.status(500).json({
       success: false,
-      error: userMessage
+      error: userMessage,
+      ...(process.env.NODE_ENV !== 'production' ? { details: err.message, code: err.code } : {})
     });
   }
 });
@@ -133,15 +163,32 @@ router.post('/login', async (req, res) => {
 
     const cleanEmail = email.trim().toLowerCase();
 
-    // 2. Find user in database
-    const user = await prisma.user.findUnique({
-      where: { email: cleanEmail }
-    });
+    // 2. Find user in database with automatic retry for transient network drops
+    let user = null;
+    let dbError = null;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        user = await prisma.user.findUnique({
+          where: { email: cleanEmail }
+        });
+        dbError = null;
+        break;
+      } catch (err) {
+        dbError = err;
+        if (attempt === 1) {
+          await new Promise(r => setTimeout(r, 600));
+        }
+      }
+    }
+
+    if (dbError) {
+      throw dbError;
+    }
 
     // Timing-safe defense against account enumeration
     if (!user) {
-      // Execute dummy hash comparison to prevent timing attacks
-      await bcrypt.compare(password, '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklmnopqr');
+      // Execute dummy hash comparison using a valid pre-computed bcrypt hash
+      await bcrypt.compare(password, '$2a$10$CwTycUXWue0Thq9StjUM0uJ8tLgUjD/9xWq.nI7M3j9hC8K3m7K4e');
       return res.status(401).json({
         success: false,
         error: 'Invalid email address or password.'
@@ -156,7 +203,15 @@ router.post('/login', async (req, res) => {
       });
     }
 
-    // 4. Verify bcrypt password hash
+    // 4. Verify password field presence
+    if (!user.password || typeof user.password !== 'string') {
+      return res.status(401).json({
+        success: false,
+        error: 'Account authentication error. Please reset your password.'
+      });
+    }
+
+    // 5. Verify bcrypt password hash
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       return res.status(401).json({
@@ -165,7 +220,7 @@ router.post('/login', async (req, res) => {
       });
     }
 
-    // 5. Safe user profile (exclude password hash)
+    // 6. Safe user profile (exclude password hash)
     const userProfile = {
       id: user.id,
       name: user.name,
@@ -177,7 +232,7 @@ router.post('/login', async (req, res) => {
       createdAt: user.createdAt
     };
 
-    // 6. Generate signed JWT token
+    // 7. Generate signed JWT token
     const token = generateToken(userProfile);
 
     return res.status(200).json({
@@ -189,12 +244,25 @@ router.post('/login', async (req, res) => {
   } catch (err) {
     console.error('[Auth Error - Login]:', err);
     let userMessage = 'An unexpected error occurred during login. Please try again.';
-    if (err.message && (err.message.includes('reach database') || err.message.includes('P1001') || err.message.includes('connect'))) {
-      userMessage = 'Database service temporarily unavailable. Please retry in a few seconds.';
+    const msg = (err.message || '').toLowerCase();
+    const code = err.code || '';
+
+    if (code === 'P1001' || code === 'P1002' || code === 'P1008' || code === 'P1017' || code === 'P2024' ||
+        msg.includes('reach database') || msg.includes('etimedout') || msg.includes('timeout') ||
+        msg.includes('connection terminated') || msg.includes('closed unexpectedly') || msg.includes('connect')) {
+      userMessage = 'Database service connection timed out. Please retry in a few seconds.';
+    } else if (code === 'P1000' || msg.includes('authentication failed against database')) {
+      userMessage = 'Database authentication error. Please verify backend database credentials.';
+    } else if (code === 'P2021' || msg.includes('does not exist') || msg.includes('relation')) {
+      userMessage = 'Database tables are currently initializing. Please retry in a few moments.';
+    } else if (msg.includes('database_url') || msg.includes('nonempty url')) {
+      userMessage = 'Database connection is not configured on the server. Please check DATABASE_URL.';
     }
+
     return res.status(500).json({
       success: false,
-      error: userMessage
+      error: userMessage,
+      ...(process.env.NODE_ENV !== 'production' ? { details: err.message, code: err.code } : {})
     });
   }
 });

@@ -10,8 +10,12 @@ import AuthModal from './components/AuthModal';
 import ManualPaymentModal from './components/ManualPaymentModal';
 import Footer from './components/Footer';
 
-// Backend API URL
-const API_BASE = typeof window !== 'undefined' && window.location.port === '5173' ? 'http://localhost:5000' : '';
+// Backend API URL (Supports local dev ports e.g. 5173/5174 and same-origin production deployments)
+const isLocalDev = typeof window !== 'undefined' && 
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && 
+  window.location.port !== '5000' && window.location.port !== '';
+
+const API_BASE = isLocalDev ? 'http://localhost:5000' : '';
 
 /**
  * Maps a URL pathname to an internal active page state.
