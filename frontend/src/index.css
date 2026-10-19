@@ -1,14 +1,18 @@
 /* Modern Global Styles & Defensive SVG / Layout Resets */
 
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
-html, body {
+html,
+body {
   margin: 0;
   padding: 0;
   min-height: 100vh;
   width: 100%;
+  overflow-x: clip;
 }
 
 #root {
@@ -20,6 +24,39 @@ html, body {
   flex-direction: column;
 }
 
+/* Background Logo Watermark (49% Opacity) */
+.logo-watermark-layer {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: clamp(1.5rem, 6vw, 6rem);
+  pointer-events: none;
+  user-select: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.logo-watermark-content {
+  opacity: 0.19 !important;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  pointer-events: none;
+}
+
+.logo-watermark-img {
+  width: clamp(400px, 50vw, 860px) !important;
+  height: clamp(400px, 50vw, 860px) !important;
+  opacity: 0.19 !important;
+  max-width: 95vw !important;
+  max-height: 90vh !important;
+  object-fit: contain;
+}
+
 /* Hard defensive constraints on all SVGs to prevent browser layout explosions */
 svg {
   display: inline-block;
@@ -29,12 +66,35 @@ svg {
 }
 
 /* Explicit size mappings in case CSS utilities are delayed */
-svg.w-3  { width: 0.75rem !important; height: 0.75rem !important; }
-svg.w-3\.5 { width: 0.875rem !important; height: 0.875rem !important; }
-svg.w-4  { width: 1rem !important; height: 1rem !important; }
-svg.w-5  { width: 1.25rem !important; height: 1.25rem !important; }
-svg.w-6  { width: 1.5rem !important; height: 1.5rem !important; }
-svg.w-10 { width: 2.5rem !important; height: 2.5rem !important; }
+svg.w-3 {
+  width: 0.75rem !important;
+  height: 0.75rem !important;
+}
+
+svg.w-3\.5 {
+  width: 0.875rem !important;
+  height: 0.875rem !important;
+}
+
+svg.w-4 {
+  width: 1rem !important;
+  height: 1rem !important;
+}
+
+svg.w-5 {
+  width: 1.25rem !important;
+  height: 1.25rem !important;
+}
+
+svg.w-6 {
+  width: 1.5rem !important;
+  height: 1.5rem !important;
+}
+
+svg.w-10 {
+  width: 2.5rem !important;
+  height: 2.5rem !important;
+}
 
 /* Custom Sleek Scrollbar */
 ::-webkit-scrollbar {

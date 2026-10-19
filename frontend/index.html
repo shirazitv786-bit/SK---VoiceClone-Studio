@@ -1,43 +1,67 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AI Voice Cloning Studio (Local XTTS-v2)</title>
 
-    <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SK - VoiceClone Studio | AI Voice Cloning & Neural Speech Synthesis</title>
+  <meta name="description" content="Professional-grade neural AI voice cloning and speech synthesis studio. 120+ realistic human voices across 35+ regional accents with precision acoustic modulation." />
+  <meta name="keywords" content="voice cloning, ai voice, text to speech, elevenlabs, speech synthesis, xtts, neural voice, voice generator, multi-accent tts" />
+  <meta name="author" content="SK - VoiceClone Studio" />
 
-    <!-- Tailwind CSS CDN with configuration -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        darkMode: 'class',
-        theme: {
-          extend: {
-            fontFamily: {
-              sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
-              mono: ['"JetBrains Mono"', 'monospace'],
-            },
-            animation: {
-              fadeIn: 'fadeIn 0.25s ease-out forwards',
-            },
-            keyframes: {
-              fadeIn: {
-                '0%': { opacity: '0', transform: 'translateY(6px)' },
-                '100%': { opacity: '1', transform: 'translateY(0)' },
-              }
+  <!-- Canonical Tag (Dynamically updated per page route) -->
+  <link rel="canonical" href="https://sk-voiceclone.studio/" id="canonical-tag" />
+
+  <!-- Open Graph / Social SEO -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="SK - VoiceClone Studio" />
+  <meta property="og:title" content="SK - VoiceClone Studio | AI Voice Cloning & Neural Speech Synthesis" />
+  <meta property="og:description" content="Professional-grade neural AI voice cloning and speech synthesis studio. 120+ realistic human voices across 35+ regional accents." />
+  <meta property="og:url" content="https://sk-voiceclone.studio/" />
+  <meta property="og:image" content="/favicon.svg" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="SK - VoiceClone Studio | AI Voice Cloning & Neural Speech Synthesis" />
+  <meta name="twitter:description" content="Professional-grade neural AI voice cloning and speech synthesis studio. 120+ realistic human voices across 35+ regional accents." />
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet">
+
+  <!-- Tailwind CSS CDN with configuration -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          animation: {
+            fadeIn: 'fadeIn 0.25s ease-out forwards',
+          },
+          keyframes: {
+            fadeIn: {
+              '0%': { opacity: '0', transform: 'translateY(6px)' },
+              '100%': { opacity: '1', transform: 'translateY(0)' },
             }
           }
         }
       }
-    </script>
-  </head>
-  <body class="bg-[#09090b] text-zinc-100 antialiased selection:bg-neutral-800 selection:text-white">
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+    }
+  </script>
+</head>
+
+<body class="bg-[#09090b] text-zinc-100 antialiased selection:bg-neutral-800 selection:text-white">
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+
 </html>

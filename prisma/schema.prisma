@@ -1,0 +1,102 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String       @id @default(uuid())
+  name        String
+  email       String       @unique
+  password    String
+  role        String       @default("user") // "user" | "admin" | "superadmin"
+  status      String       @default("active") // "active" | "suspended"
+  plan        String       @default("Free")
+  credits     Int          @default(2000)
+  planType    String?      @default("Free") @map("plan_type")
+  charactersLeft Int?      @default(2000) @map("characters_left")
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  generations Generation[]
+  voices      Voice[]
+  manualPayments ManualPayment[]
+
+  @@map("users")
+}
+
+model SystemSetting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("system_settings")
+}
+
+model Voice {
+  id           String   @id @default(uuid())
+  slug         String   @unique
+  name         String
+  filename     String
+  category     String?
+  language     String?
+  languageCode String?
+  gender       String?
+  description  String?
+  previewText  String?
+  tags         String[]
+  neuralVoice  String?
+  isCustom     Boolean  @default(false)
+  userId       String?
+  user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("voices")
+}
+
+model Generation {
+  id             String    @id @default(uuid())
+  userId         String?
+  user           User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  deviceId       String?
+  text           String
+  referenceVoice String
+  audioUrl       String?
+  speed          Float     @default(-8)
+  pitch          Float     @default(-4)
+  pause          Float     @default(0.22)
+  charsUsed      Int       @default(0)
+  createdAt      DateTime  @default(now())
+  expiresAt      DateTime? @map("expires_at")
+  isExpired      Boolean   @default(false) @map("is_expired")
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([expiresAt])
+  @@index([isExpired])
+  @@map("generations")
+}
+
+model ManualPayment {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planType      String   @map("plan_type")
+  amount        String?
+  transactionId String   @unique @map("transaction_id")
+  screenshotUrl String?  @map("screenshot_url")
+  senderNumber  String?  @map("sender_number")
+  status        String   @default("pending") // "pending" | "approved" | "rejected"
+  adminNotes    String?  @map("admin_notes")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("manual_payments")
+}

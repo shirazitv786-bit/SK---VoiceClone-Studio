@@ -14,6 +14,14 @@ export default defineConfig({
       '/audio': {
         target: 'http://localhost:5000',
         changeOrigin: true
+      },
+      '/voices': {
+        target: 'http://localhost:5000',
+        changeOrigin: true
+      },
+      '/uploads': {
+        target: 'http://localhost:5000',
+        changeOrigin: true
       }
     }
   }

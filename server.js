@@ -1,27 +1,142 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const { execFile, spawn } = require('child_process');
 const multer = require('multer');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const { prisma, checkDatabaseConnection } = require('./prismaClient');
+const authRoutes = require('./routes/auth');
+const adminRoutes = require('./routes/admin');
+const userRoutes = require('./routes/user');
+const { bootstrapSuperadmin } = require('./bootstrapSuperadmin');
+const { optionalAuth, authenticateToken, requireAdmin, requireSuperadmin } = require('./middleware/auth');
+const { initScheduledCleanup, cleanupOldAudioFiles } = require('./utils/storageCleanup');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Enable CORS and JSON body parser middleware
-app.use(cors());
-app.use(express.json());
+// Security: Disable X-Powered-By to prevent technology stack disclosure
+app.disable('x-powered-by');
+
+// 1. HTTP Security Headers with Helmet
+app.use(helmet({
+  contentSecurityPolicy: false, // Allows CDN scripts, Google Fonts, and audio player blobs
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
+
+// 2. CORS Security Configuration
+app.use(cors({
+  origin: true,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}));
+
+// 3. Body Parser with bounded limits (prevents payload exhaustion)
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+
+// 4. Rate Limiting Protection (DDoS and brute-force mitigations)
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 500,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Rate limit exceeded. Please try again later.' }
+});
+app.use('/api', apiLimiter);
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many authentication attempts. Please wait 15 minutes.' }
+});
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', authLimiter);
+
+const ttsLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Synthesis rate limit reached. Please wait a moment.' }
+});
+
+// 5. Mount Authentication, User & Admin Management Routes
+app.use('/api/auth', authRoutes);
+app.use('/api/user', userRoutes);
+app.use('/api/admin', adminRoutes);
+
+// 6. Public Subscription Packages & Pricing Plans Endpoint
+const { DEFAULT_PLANS } = require('./utils/defaultPlans');
+app.get('/api/plans', async (req, res) => {
+  try {
+    const plansSetting = await prisma.systemSetting.findUnique({
+      where: { key: 'plans_config' }
+    });
+    if (plansSetting && plansSetting.value) {
+      try {
+        const parsed = JSON.parse(plansSetting.value);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return res.json({ success: true, plans: parsed });
+        }
+      } catch (e) {}
+    }
+    return res.json({ success: true, plans: DEFAULT_PLANS });
+  } catch (err) {
+    return res.json({ success: true, plans: DEFAULT_PLANS });
+  }
+});
+
+/**
+ * Resolves maximum characters allowed per generation dynamically from active plans configuration
+ */
+async function getDynamicPlanMaxChars(planName) {
+  try {
+    const plansSetting = await prisma.systemSetting.findUnique({
+      where: { key: 'plans_config' }
+    });
+    let activePlans = DEFAULT_PLANS;
+    if (plansSetting && plansSetting.value) {
+      try {
+        const parsed = JSON.parse(plansSetting.value);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          activePlans = parsed;
+        }
+      } catch (e) {}
+    }
+    const cleanPlan = (planName || 'Free').trim().toLowerCase();
+    const matched = activePlans.find(p => 
+      (p.id && p.id.trim().toLowerCase() === cleanPlan) || 
+      (p.name && p.name.trim().toLowerCase() === cleanPlan)
+    );
+    if (matched && matched.maxCharsPerGen) {
+      return parseInt(matched.maxCharsPerGen, 10);
+    }
+  } catch (e) {
+    console.warn('[Plan Check Error]:', e.message);
+  }
+  return (planName && planName.toLowerCase() !== 'free') ? 15000 : 2500;
+}
 
 // Ensure required application directories and data files exist
 const voicesDir = path.join(__dirname, 'voices');
 const audioDir = path.join(__dirname, 'audio');
 const tempDir = path.join(__dirname, 'temp');
+const paymentsDir = path.join(__dirname, 'uploads', 'payments');
 const historyFile = path.join(__dirname, 'history.json');
 const registryFile = path.join(__dirname, 'voices_registry.json');
 
 if (!fs.existsSync(voicesDir)) fs.mkdirSync(voicesDir, { recursive: true });
 if (!fs.existsSync(audioDir)) fs.mkdirSync(audioDir, { recursive: true });
 if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+if (!fs.existsSync(paymentsDir)) fs.mkdirSync(paymentsDir, { recursive: true });
 if (!fs.existsSync(historyFile)) fs.writeFileSync(historyFile, JSON.stringify([], null, 2));
 
 const frontendDist = path.join(__dirname, 'frontend', 'dist');
@@ -30,8 +145,50 @@ const frontendDist = path.join(__dirname, 'frontend', 'dist');
 if (fs.existsSync(frontendDist)) {
   app.use(express.static(frontendDist));
 }
-app.use('/voices', express.static(voicesDir));
-app.use('/audio', express.static(audioDir));
+// Serve static audio and voices with explicit cross-origin headers and range requests
+const staticAudioOptions = {
+  setHeaders: (res) => {
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+    res.setHeader('Accept-Ranges', 'bytes');
+  }
+};
+
+app.use('/voices', (req, res, next) => {
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+}, express.static(voicesDir, staticAudioOptions));
+
+app.use('/audio', (req, res, next) => {
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+}, express.static(audioDir, staticAudioOptions));
+
+// If audio file is missing or was cleaned up after 24h, return informative 410 Gone
+app.use('/audio/:filename', (req, res) => {
+  return res.status(410).json({
+    success: false,
+    expired: true,
+    error: 'Audio file expired or not found.',
+    message: 'Generated audio files are temporarily stored on the server for 24 hours to conserve storage. The text prompt, voice model, and settings remain permanently saved in your database history.'
+  });
+});
+
+app.use('/uploads', (req, res, next) => {
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+}, express.static(path.join(__dirname, 'uploads'), staticAudioOptions));
+
 app.use(express.static(__dirname));
 
 // Helper: Determine python executable path (checks Docker venv, local venv, and system paths)
@@ -365,25 +522,57 @@ const upload = multer({
  * GET /api/health
  * Health check endpoint for frontend connectivity indicator
  */
-app.get('/api/health', (req, res) => {
+app.get('/api/health', async (req, res) => {
+  const dbStatus = await checkDatabaseConnection();
   const voices = fs.readdirSync(voicesDir).filter(f => f.toLowerCase().endsWith('.wav'));
   res.json({
     status: 'ok',
     serverTime: new Date().toISOString(),
+    database: dbStatus.connected ? 'connected' : 'disconnected',
+    databaseError: dbStatus.error || null,
     voicesAvailable: voices.length,
+    ttsWorkerReady: ttsWorkerReady,
     pythonExecutable: getPythonExecutable()
   });
 });
 
 /**
  * GET /api/voices
- * Lists all available .wav reference voice files and rich registry metadata
+ * Lists all available .wav reference voice files and rich registry metadata from Railway PostgreSQL
  */
-app.get('/api/voices', (req, res) => {
+app.get('/api/voices', async (req, res) => {
   try {
     const files = fs.readdirSync(voicesDir).filter(file => file.toLowerCase().endsWith('.wav'));
     let registry = [];
-    if (fs.existsSync(registryFile)) {
+
+    // 1. Fetch primary voice directory from PostgreSQL database
+    try {
+      const dbVoices = await prisma.voice.findMany({
+        orderBy: { name: 'asc' }
+      });
+      if (dbVoices && dbVoices.length > 0) {
+        registry = dbVoices.map(v => ({
+          id: v.slug,
+          name: v.name,
+          filename: v.filename,
+          category: v.category || 'General',
+          language: v.language || 'English',
+          languageCode: v.languageCode || 'en',
+          gender: v.gender || 'Unknown',
+          neuralVoice: v.neuralVoice,
+          description: v.description,
+          tags: v.tags || [],
+          previewText: v.previewText,
+          isCustom: v.isCustom,
+          userId: v.userId
+        }));
+      }
+    } catch (dbErr) {
+      console.warn('[DB Notice] Could not read voices from PostgreSQL, checking file fallback:', dbErr.message);
+    }
+
+    // 2. File fallback if DB query returned empty
+    if (registry.length === 0 && fs.existsSync(registryFile)) {
       try {
         registry = JSON.parse(fs.readFileSync(registryFile, 'utf8') || '[]');
       } catch (e) {
@@ -408,18 +597,44 @@ app.get('/api/voices', (req, res) => {
 
 /**
  * POST /api/upload-voice
- * Accepts a .wav file upload and stores it inside voices/
+ * Accepts a .wav file upload and stores it inside voices/ (Requires Authenticated User)
  */
-app.post('/api/upload-voice', upload.single('voiceSample'), (req, res) => {
+app.post('/api/upload-voice', authenticateToken, upload.single('voiceSample'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'Please select a valid .wav audio file to upload.' });
   }
 
-  console.log(`New reference voice uploaded: ${req.file.filename}`);
+  const cleanBaseName = path.parse(req.file.originalname).name.replace(/[^a-zA-Z0-9_\-\s]/g, '').trim();
+  const voiceName = cleanBaseName || 'Custom Cloned Voice';
+  const slug = `custom-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+  // Store custom voice record in Railway PostgreSQL database
+  try {
+    await prisma.voice.create({
+      data: {
+        slug,
+        name: `${voiceName} (Custom)`,
+        filename: req.file.filename,
+        category: 'Custom Cloned',
+        language: 'Multilingual',
+        languageCode: 'en',
+        gender: 'Custom',
+        description: `Custom cloned voice uploaded by ${req.user.name || req.user.email}`,
+        tags: ['Custom', 'Cloned', 'User Upload'],
+        isCustom: true,
+        userId: req.user.id
+      }
+    });
+  } catch (dbErr) {
+    console.warn('[DB Error] Failed to persist custom voice record:', dbErr.message);
+  }
+
+  console.log(`New reference voice uploaded by ${req.user.email}: ${req.file.filename}`);
   return res.json({
     success: true,
-    message: 'Voice sample uploaded successfully!',
-    filename: req.file.filename
+    message: 'Voice sample uploaded and saved to your voice library!',
+    filename: req.file.filename,
+    voiceName: `${voiceName} (Custom)`
   });
 });
 
@@ -442,7 +657,7 @@ app.get('/api/history', (req, res) => {
  * DELETE /api/history
  * Deletes records for a specific deviceId (all or single item) and safely cleans up audio files
  */
-app.delete('/api/history', (req, res) => {
+app.delete('/api/history', async (req, res) => {
   try {
     const { deviceId, itemId } = req.query;
     if (!deviceId) {
@@ -478,6 +693,13 @@ app.delete('/api/history', (req, res) => {
 
     fs.writeFileSync(historyFile, JSON.stringify(remaining, null, 2), 'utf8');
 
+    // Also delete matching records from PostgreSQL database
+    if (itemId) {
+      try {
+        await prisma.generation.deleteMany({ where: { id: itemId } });
+      } catch (e) {}
+    }
+
     return res.json({
       success: true,
       deletedCount: toDelete.length,
@@ -491,10 +713,10 @@ app.delete('/api/history', (req, res) => {
 
 
 /**
- * POST /api/clone-voice
- * Executes Python runner using execFile with emotion & acoustic modulation support
+ * POST /api/clone-voice & POST /api/generate
+ * Executes speech synthesis using warm worker / fallback runner with emotion & acoustic modulation
  */
-app.post('/api/clone-voice', async (req, res) => {
+app.post(['/api/clone-voice', '/api/generate'], ttsLimiter, optionalAuth, async (req, res) => {
   const {
     text,
     referenceVoice,
@@ -507,6 +729,35 @@ app.post('/api/clone-voice', async (req, res) => {
 
   if (!text || !text.trim()) {
     return res.status(400).json({ error: 'Text prompt is required.' });
+  }
+
+  const scriptLength = text.trim().length;
+
+  // Maximum script length check against dynamic subscription plan limits
+  const userPlan = req.user ? (req.user.plan || 'Free') : 'Free';
+  const maxAllowedChars = await getDynamicPlanMaxChars(userPlan);
+  if (scriptLength > maxAllowedChars) {
+    return res.status(400).json({
+      success: false,
+      error: `Script length (${scriptLength.toLocaleString()} characters) exceeds the maximum allowed limit of ${maxAllowedChars.toLocaleString()} characters for your ${userPlan} plan.`
+    });
+  }
+
+  // Account Status & Credit verification for authenticated users
+  if (req.user) {
+    if (req.user.status === 'suspended') {
+      return res.status(403).json({
+        success: false,
+        error: 'Your account has been suspended by an administrator. Generation is disabled.'
+      });
+    }
+
+    if (req.user.credits < scriptLength) {
+      return res.status(402).json({
+        success: false,
+        error: `Insufficient credits. This generation requires ${scriptLength.toLocaleString()} characters, but your account only has ${req.user.credits.toLocaleString()} credits. Please upgrade your package on the Pricing page.`
+      });
+    }
   }
 
   // Flexible Voice Resolution: filename, id, name, or fallback
@@ -578,6 +829,7 @@ app.post('/api/clone-voice', async (req, res) => {
   const timestamp = Date.now();
   const audioFilename = `output_${timestamp}.mp3`;
   const targetAudioPath = path.join(audioDir, audioFilename);
+  const audioUrl = `/audio/${audioFilename}`;
   const jobId = `conv_${timestamp}`;
 
   const optionsPayload = {
@@ -611,11 +863,14 @@ app.post('/api/clone-voice', async (req, res) => {
     const elapsedMs = Date.now() - t0;
     console.log(`[TTS Engine] Completed in ${elapsedMs}ms: ${audioFilename}`);
 
-    const audioUrl = `/audio/${audioFilename}`;
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
     const historyEntry = {
       id: jobId,
       deviceId: deviceId,
       timestamp: new Date().toISOString(),
+      expiresAt: expiresAt.toISOString(),
+      isExpired: false,
       text: text.trim().length > 120 ? text.trim().substring(0, 120) + '...' : text.trim(),
       referenceVoice: resolvedVoiceFilename,
       audioUrl: audioUrl
@@ -624,11 +879,49 @@ app.post('/api/clone-voice', async (req, res) => {
     appendHistory(historyEntry);
     activeJobs.delete(jobId);
 
+    // Atomically deduct credits and record in PostgreSQL database if authenticated
+    let remainingCredits = req.user ? req.user.credits : null;
+    if (req.user) {
+      try {
+        const updated = await prisma.user.update({
+          where: { id: req.user.id },
+          data: { credits: { decrement: scriptLength } },
+          select: { credits: true }
+        });
+        remainingCredits = updated.credits;
+      } catch (e) {
+        console.warn('[DB Error] Credit deduction failed:', e.message);
+      }
+    }
+
+    try {
+      await prisma.generation.create({
+        data: {
+          id: jobId,
+          userId: req.user ? req.user.id : null,
+          deviceId: deviceId,
+          text: text.trim().slice(0, 500),
+          referenceVoice: resolvedVoiceFilename,
+          audioUrl: audioUrl,
+          speed: optionsPayload.speed,
+          pitch: optionsPayload.pitch,
+          pause: optionsPayload.pause,
+          charsUsed: scriptLength,
+          expiresAt: expiresAt,
+          isExpired: false
+        }
+      });
+    } catch (e) {
+      // Non-blocking log
+    }
+
     return res.json({
       success: true,
       audioUrl: audioUrl,
       historyRecord: historyEntry,
-      duration: `${(elapsedMs / 1000).toFixed(2)}s`
+      duration: `${(elapsedMs / 1000).toFixed(2)}s`,
+      charsUsed: scriptLength,
+      remainingCredits: remainingCredits
     });
   } catch (error) {
     activeJobs.delete(jobId);
@@ -642,53 +935,101 @@ app.post('/api/clone-voice', async (req, res) => {
 });
 
 /**
- * DELETE /api/cleanup-audio
- * Server-side cleanup utility to delete old or all generated audio files
+ * GET /api/audio/download/:id
+ * Secure download endpoint with 24-hour retention window verification
  */
-app.delete('/api/cleanup-audio', (req, res) => {
+app.get('/api/audio/download/:id', async (req, res) => {
   try {
-    const { all, olderThanHours } = req.query;
-    const files = fs.readdirSync(audioDir).filter(f => f.startsWith('output_') && (f.endsWith('.mp3') || f.endsWith('.wav')));
-    let deletedCount = 0;
-    const now = Date.now();
-    const maxAgeMs = olderThanHours ? parseFloat(olderThanHours) * 3600 * 1000 : 0;
+    const { id } = req.params;
 
-    files.forEach(file => {
-      const filePath = path.join(audioDir, file);
-      let shouldDelete = false;
+    // Look up in PostgreSQL database
+    let record = null;
+    try {
+      record = await prisma.generation.findUnique({ where: { id } });
+    } catch (e) {}
 
-      if (all === 'true' || (!olderThanHours && all !== 'false')) {
-        shouldDelete = true;
-      } else if (maxAgeMs > 0) {
-        const stats = fs.statSync(filePath);
-        if (now - stats.mtimeMs > maxAgeMs) {
-          shouldDelete = true;
-        }
+    let filename = `output_${id}.mp3`;
+    if (record && record.audioUrl) {
+      filename = path.basename(record.audioUrl);
+    } else if (id.endsWith('.mp3') || id.endsWith('.wav')) {
+      filename = path.basename(id);
+    }
+
+    const filePath = path.join(audioDir, filename);
+
+    // Check physical existence on disk
+    if (!fs.existsSync(filePath)) {
+      return res.status(410).json({
+        success: false,
+        expired: true,
+        error: 'This audio file has expired and was automatically deleted after 24 hours to conserve server storage.',
+        text: record ? record.text : null,
+        referenceVoice: record ? record.referenceVoice : null,
+        message: 'Your text script and generation metadata remain permanently saved in your account history.'
+      });
+    }
+
+    const stats = fs.statSync(filePath);
+    const ageMs = Date.now() - stats.mtimeMs;
+    const maxAgeMs = 24 * 3600 * 1000;
+
+    if (ageMs > maxAgeMs) {
+      // File has exceeded 24 hours, purge it
+      try { fs.unlinkSync(filePath); } catch (e) {}
+      if (record) {
+        await prisma.generation.update({ where: { id }, data: { isExpired: true } }).catch(() => {});
       }
+      return res.status(410).json({
+        success: false,
+        expired: true,
+        error: 'This audio file has expired (exceeded 24-hour storage window) and was removed from the server.',
+        text: record ? record.text : null,
+        referenceVoice: record ? record.referenceVoice : null,
+        message: 'Your text script and generation metadata remain permanently saved in your account history.'
+      });
+    }
 
-      if (shouldDelete) {
-        fs.unlinkSync(filePath);
-        deletedCount++;
-      }
+    const expiresAt = new Date(stats.mtimeMs + maxAgeMs);
+    const hoursRemaining = Math.max(0, Math.round((expiresAt.getTime() - Date.now()) / (3600 * 1000)));
+
+    const downloadName = record?.referenceVoice 
+      ? `sk_voiceclone_${record.referenceVoice.replace(/[^a-zA-Z0-9_-]/g, '_')}_${Date.now()}.mp3`
+      : `sk_voiceclone_${id}.mp3`;
+
+    res.setHeader('Content-Type', filename.endsWith('.wav') ? 'audio/wav' : 'audio/mpeg');
+    res.setHeader('Content-Disposition', `attachment; filename="${downloadName}"`);
+    res.setHeader('X-Storage-Policy', 'temporary-24h');
+    res.setHeader('X-Expires-At', expiresAt.toISOString());
+    res.setHeader('X-Hours-Remaining', hoursRemaining.toString());
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+
+    return res.sendFile(filePath);
+  } catch (err) {
+    console.error('[Audio Download Error]:', err);
+    return res.status(500).json({ success: false, error: 'Failed to process audio download.' });
+  }
+});
+
+/**
+ * DELETE /api/cleanup-audio
+ * Server-side cleanup utility to delete old or all generated audio files (Protected: Admin Only)
+ */
+app.delete('/api/cleanup-audio', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { all, olderThanHours = 24 } = req.query;
+    const result = await cleanupOldAudioFiles({
+      olderThanHours: parseFloat(olderThanHours) || 24,
+      audioDir,
+      deleteAll: all === 'true'
     });
-
-    // Synchronize history.json to only contain audio files that still exist on disk
-    const remainingFiles = new Set(fs.readdirSync(audioDir));
-    const currentHistory = readHistory();
-    const updatedHistory = (all === 'true')
-      ? []
-      : currentHistory.filter(item => {
-          const filename = path.basename(item.audioUrl);
-          return remainingFiles.has(filename);
-        });
-
-    fs.writeFileSync(historyFile, JSON.stringify(updatedHistory, null, 2), 'utf8');
 
     return res.json({
       success: true,
-      message: `Cleaned up ${deletedCount} audio file(s).`,
-      deletedCount,
-      remainingCount: remainingFiles.size
+      message: `Cleaned up ${result.deletedCount} audio file(s) (Freed ${result.freedMb} MB).`,
+      deletedCount: result.deletedCount,
+      freedMb: result.freedMb,
+      remainingCount: result.remainingCount
     });
   } catch (err) {
     console.error('Cleanup operation failed:', err);
@@ -729,7 +1070,7 @@ app.use((err, req, res, next) => {
 });
 
 // Start the Express server
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, async () => {
   console.log(`===============================================`);
   console.log(` AI Voice Cloning Backend Server Running!`);
   console.log(` URL: http://localhost:${PORT}`);
@@ -737,6 +1078,12 @@ const server = app.listen(PORT, () => {
   console.log(` Audio output directory: ${audioDir}`);
   console.log(` Python executable: ${getPythonExecutable()}`);
   console.log(`===============================================`);
+
+  // Ensure superadmin account and default settings exist
+  await bootstrapSuperadmin();
+
+  // Initialize temporary audio storage 24-hour auto-delete scheduler
+  initScheduledCleanup({ intervalMinutes: 30, olderThanHours: 24 });
 });
 
 // Clean up child process on shutdown
