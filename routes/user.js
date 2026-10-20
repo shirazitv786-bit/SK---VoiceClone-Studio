@@ -5,6 +5,7 @@ const multer = require('multer');
 const { prisma } = require('../prismaClient');
 const { authenticateToken } = require('../middleware/auth');
 const { DEFAULT_PLANS } = require('../utils/defaultPlans');
+const { getSubscriptionStatus } = require('../utils/subscriptionManager');
 
 const router = express.Router();
 const audioDir = path.join(__dirname, '..', 'audio');
@@ -61,6 +62,8 @@ router.get('/dashboard', async (req, res) => {
           role: true,
           plan: true,
           credits: true,
+          subscriptionEndDate: true,
+          creditsExpiresAt: true,
           status: true,
           createdAt: true
         }
@@ -107,14 +110,25 @@ const mapGenerationRetention = (g) => {
   };
 };
 
+    const subStatus = getSubscriptionStatus(user);
+
     return res.json({
       success: true,
-      user,
+      user: {
+        ...user,
+        subscriptionStatus: subStatus
+      },
       stats: {
         totalGenerations: statsAgg._count.id || 0,
         totalCharsUsed: statsAgg._sum.charsUsed || 0,
         creditsRemaining: user.credits,
-        activePlan: user.plan
+        activePlan: user.plan,
+        subscriptionEndDate: user.subscriptionEndDate,
+        creditsExpiresAt: user.creditsExpiresAt,
+        daysRemaining: subStatus?.daysRemaining ?? null,
+        hoursRemaining: subStatus?.hoursRemaining ?? null,
+        isSubscriptionExpired: subStatus?.isExpired ?? false,
+        subscriptionStatusLabel: subStatus?.statusLabel ?? 'Free Tier'
       },
       generations: generations.map(mapGenerationRetention)
     });
@@ -210,9 +224,9 @@ router.post('/manual-payment', (req, res, next) => {
     // Dynamically retrieve configured plans
     let validPlans = ['Lite', 'Pro', 'Studio'];
     let planAmounts = {
-      Lite: '$10.00 / PKR 2,800',
-      Pro: '$17.00 / PKR 4,750',
-      Studio: '$24.00 / PKR 6,700'
+      Lite: 'PKR 2,800',
+      Pro: 'PKR 4,750',
+      Studio: 'PKR 6,700'
     };
     try {
       const plansSetting = await prisma.systemSetting.findUnique({ where: { key: 'plans_config' } });
@@ -220,7 +234,7 @@ router.post('/manual-payment', (req, res, next) => {
       if (Array.isArray(currentPlans) && currentPlans.length > 0) {
         validPlans = currentPlans.filter(p => p.id !== 'Free' && p.isEnabled !== false).map(p => p.id);
         currentPlans.forEach(p => {
-          planAmounts[p.id] = `${p.displayPrice || `$${p.priceMonthly}.00`} / ${p.pricePKR || `PKR ${p.priceMonthly * 280}`}`;
+          planAmounts[p.id] = p.pricePKR || p.displayPrice || `PKR ${Number(p.priceMonthly || 0).toLocaleString()}`;
         });
       }
     } catch (e) {}

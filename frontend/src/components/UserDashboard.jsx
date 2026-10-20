@@ -316,6 +316,13 @@ export default function UserDashboard({ user, onNavigate, onOpenManualPayment, o
             <p className="text-[11px] text-zinc-400 mt-1">
               Active Tier: <span className="text-zinc-200 font-bold">{stats.activePlan}</span>
             </p>
+            {currentUser?.plan !== 'Free' && (currentUser?.creditsExpiresAt || currentUser?.subscriptionEndDate) && (
+              <div className="mt-1.5 flex items-center gap-1.5 text-[10px] font-mono">
+                <span className={stats.isSubscriptionExpired ? 'text-rose-400 font-bold' : stats.daysRemaining <= 5 ? 'text-amber-400 font-bold' : 'text-emerald-400'}>
+                  ⏳ {stats.isSubscriptionExpired ? 'Credits Expired' : `${stats.daysRemaining ?? 30}d validity left`}
+                </span>
+              </div>
+            )}
             <button
               onClick={() => (onOpenManualPayment ? onOpenManualPayment(currentUser?.plan === 'Free' ? 'Pro' : currentUser?.plan) : onNavigate('pricing'))}
               className="mt-3.5 w-full py-2 px-3 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-black flex items-center justify-center gap-2 transition-all shadow-md active:scale-95 cursor-pointer"
@@ -784,13 +791,42 @@ export default function UserDashboard({ user, onNavigate, onOpenManualPayment, o
         <div className="space-y-8">
           <div className="p-8 rounded-3xl border bg-[#121215] border-zinc-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div>
-              <span className="text-xs uppercase tracking-wider font-bold text-zinc-400">Current Subscription</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs uppercase tracking-wider font-bold text-zinc-400">Current Subscription</span>
+                {currentUser?.plan !== 'Free' && (
+                  <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
+                    stats.isSubscriptionExpired
+                      ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                      : (stats.daysRemaining !== null && stats.daysRemaining <= 5)
+                        ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                        : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                  }`}>
+                    {stats.isSubscriptionExpired ? 'Credits Expired' : `${stats.daysRemaining ?? 30} Days Left (30-day Validity)`}
+                  </span>
+                )}
+              </div>
               <h2 className="text-2xl sm:text-3xl font-extrabold text-white mt-1">
                 {currentUser?.plan || 'Free'} Plan
               </h2>
               <p className="text-xs text-zinc-400 mt-1">
                 Remaining character balance: <span className="font-mono font-bold text-white">⚡ {currentUser?.credits?.toLocaleString() || '2,000'}</span> credits
               </p>
+              {currentUser?.plan !== 'Free' && (currentUser?.creditsExpiresAt || currentUser?.subscriptionEndDate) && (
+                <div className="mt-2 text-xs text-zinc-400 flex flex-wrap items-center gap-2 bg-zinc-900/60 border border-zinc-800/80 px-3 py-1.5 rounded-xl w-fit">
+                  <span className="text-zinc-500">Valid Until:</span>
+                  <span className="font-mono text-zinc-200 font-bold">
+                    {new Date(currentUser?.creditsExpiresAt || currentUser?.subscriptionEndDate).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric'
+                    })}
+                  </span>
+                  <span className="text-zinc-600">•</span>
+                  <span className={stats.isSubscriptionExpired ? 'text-rose-400 font-semibold' : stats.daysRemaining <= 5 ? 'text-amber-400 font-semibold' : 'text-zinc-300'}>
+                    {stats.isSubscriptionExpired ? 'Subscription period has expired' : `Credits expire after 30 days (${stats.daysRemaining ?? 0} days remaining)`}
+                  </span>
+                </div>
+              )}
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <button
@@ -910,9 +946,9 @@ export default function UserDashboard({ user, onNavigate, onOpenManualPayment, o
             </div>
 
             <div className="p-6 rounded-2xl border bg-zinc-900/60 border-zinc-800">
-              <h4 className="text-sm font-bold text-white mb-2">Instant Top-Ups</h4>
+              <h4 className="text-sm font-bold text-white mb-2">30-Day Credit Validity</h4>
               <p className="text-xs text-zinc-400 leading-relaxed">
-                Credits roll over month-to-month and never expire. Need more characters? Upgrade anytime without losing existing audio clips.
+                Character credits remain valid for 30 days from purchase. Renew or top up anytime to maintain active voice cloning credits and premium feature access.
               </p>
             </div>
 

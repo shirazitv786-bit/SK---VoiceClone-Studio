@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const { prisma } = require('../prismaClient');
 const { generateToken, authenticateToken } = require('../middleware/auth');
 const { DEFAULT_PLANS } = require('../utils/defaultPlans');
+const { calculateSubscriptionExpiry, getSubscriptionStatus, checkAndExpireUser } = require('../utils/subscriptionManager');
 
 const router = express.Router();
 
@@ -101,6 +102,8 @@ router.post('/register', async (req, res) => {
         status: true,
         plan: true,
         credits: true,
+        subscriptionEndDate: true,
+        creditsExpiresAt: true,
         createdAt: true
       }
     });
@@ -220,16 +223,22 @@ router.post('/login', async (req, res) => {
       });
     }
 
-    // 6. Safe user profile (exclude password hash)
+    // 6. Check 30-day validity and construct safe user profile
+    const activeUser = await checkAndExpireUser(user);
+    const resolvedUser = activeUser || user;
+
     const userProfile = {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      status: user.status,
-      plan: user.plan,
-      credits: user.credits,
-      createdAt: user.createdAt
+      id: resolvedUser.id,
+      name: resolvedUser.name,
+      email: resolvedUser.email,
+      role: resolvedUser.role,
+      status: resolvedUser.status,
+      plan: resolvedUser.plan,
+      credits: resolvedUser.credits,
+      subscriptionEndDate: resolvedUser.subscriptionEndDate,
+      creditsExpiresAt: resolvedUser.creditsExpiresAt,
+      subscriptionStatus: getSubscriptionStatus(resolvedUser),
+      createdAt: resolvedUser.createdAt
     };
 
     // 7. Generate signed JWT token
@@ -275,7 +284,10 @@ router.get('/me', authenticateToken, async (req, res) => {
   try {
     return res.status(200).json({
       success: true,
-      user: req.user
+      user: {
+        ...req.user,
+        subscriptionStatus: getSubscriptionStatus(req.user)
+      }
     });
   } catch (err) {
     return res.status(500).json({
@@ -307,6 +319,8 @@ router.put('/profile', authenticateToken, async (req, res) => {
         status: true,
         plan: true,
         credits: true,
+        subscriptionEndDate: true,
+        creditsExpiresAt: true,
         createdAt: true
       }
     });
@@ -387,13 +401,17 @@ router.post('/update-plan', authenticateToken, async (req, res) => {
 
     // Server-enforced credit tier allocation
     const addedCredits = plansMap[matchedPlanKey] || 0;
+    const isPaid = matchedPlanKey !== 'Free';
+    const thirtyDaysExpiry = isPaid ? calculateSubscriptionExpiry(new Date(), 30) : null;
 
-    // Atomically increment credits and update plan in database
+    // Atomically increment credits and update plan & 30-day expiry in database
     const updatedUser = await prisma.user.update({
       where: { id: req.user.id },
       data: {
         plan: matchedPlanKey,
-        credits: { increment: addedCredits }
+        credits: { increment: addedCredits },
+        subscriptionEndDate: thirtyDaysExpiry,
+        creditsExpiresAt: thirtyDaysExpiry
       },
       select: {
         id: true,
@@ -403,14 +421,33 @@ router.post('/update-plan', authenticateToken, async (req, res) => {
         status: true,
         plan: true,
         credits: true,
+        subscriptionEndDate: true,
+        creditsExpiresAt: true,
         createdAt: true
       }
     });
 
+    // Also sync the raw columns plan_type and characters_left in PostgreSQL
+    try {
+      await prisma.$executeRawUnsafe(
+        `UPDATE users SET plan_type = $1, characters_left = $2, subscription_end_date = $3, credits_expires_at = $4 WHERE id = $5`,
+        matchedPlanKey,
+        updatedUser.credits,
+        thirtyDaysExpiry,
+        thirtyDaysExpiry,
+        req.user.id
+      );
+    } catch (rawErr) {}
+
     return res.status(200).json({
       success: true,
-      message: `Successfully upgraded to ${plan} plan! +${addedCredits.toLocaleString()} credits added.`,
-      user: updatedUser
+      message: isPaid
+        ? `Successfully upgraded to ${matchedPlanKey} plan! +${addedCredits.toLocaleString()} credits added (valid for 30 days).`
+        : `Plan changed to ${matchedPlanKey}.`,
+      user: {
+        ...updatedUser,
+        subscriptionStatus: getSubscriptionStatus(updatedUser)
+      }
     });
   } catch (err) {
     console.error('[Auth Error - Update Plan]:', err);

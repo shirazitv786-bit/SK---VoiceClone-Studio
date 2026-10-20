@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,21 +8,23 @@ datasource db {
 }
 
 model User {
-  id          String       @id @default(uuid())
-  name        String
-  email       String       @unique
-  password    String
-  role        String       @default("user") // "user" | "admin" | "superadmin"
-  status      String       @default("active") // "active" | "suspended"
-  plan        String       @default("Free")
-  credits     Int          @default(2000)
-  planType    String?      @default("Free") @map("plan_type")
-  charactersLeft Int?      @default(2000) @map("characters_left")
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  generations Generation[]
-  voices      Voice[]
+  id             String          @id @default(uuid())
+  name           String
+  email          String          @unique
+  password       String
+  plan           String          @default("Free")
+  credits        Int             @default(2000)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  role           String          @default("user")
+  status         String          @default("active")
+  planType       String?         @default("Free") @map("plan_type")
+  charactersLeft Int?            @default(2000) @map("characters_left")
+  subscriptionEndDate DateTime?  @map("subscription_end_date")
+  creditsExpiresAt    DateTime?  @map("credits_expires_at")
+  generations    Generation[]
   manualPayments ManualPayment[]
+  voices         Voice[]
 
   @@map("users")
 }
@@ -54,9 +53,9 @@ model Voice {
   neuralVoice  String?
   isCustom     Boolean  @default(false)
   userId       String?
-  user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  user         User?    @relation(fields: [userId], references: [id])
 
   @@map("voices")
 }
@@ -64,7 +63,6 @@ model Voice {
 model Generation {
   id             String    @id @default(uuid())
   userId         String?
-  user           User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
   deviceId       String?
   text           String
   referenceVoice String
@@ -76,6 +74,7 @@ model Generation {
   createdAt      DateTime  @default(now())
   expiresAt      DateTime? @map("expires_at")
   isExpired      Boolean   @default(false) @map("is_expired")
+  user           User?     @relation(fields: [userId], references: [id])
 
   @@index([userId])
   @@index([createdAt])
@@ -87,16 +86,16 @@ model Generation {
 model ManualPayment {
   id            String   @id @default(uuid())
   userId        String   @map("user_id")
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   planType      String   @map("plan_type")
   amount        String?
   transactionId String   @unique @map("transaction_id")
   screenshotUrl String?  @map("screenshot_url")
   senderNumber  String?  @map("sender_number")
-  status        String   @default("pending") // "pending" | "approved" | "rejected"
+  status        String   @default("pending")
   adminNotes    String?  @map("admin_notes")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("manual_payments")
 }

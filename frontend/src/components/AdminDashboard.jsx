@@ -42,10 +42,10 @@ const DEFAULT_PLANS_TEMPLATE = [
   {
     id: 'Lite',
     name: 'Lite',
-    priceMonthly: 10,
-    priceAnnual: 8,
+    priceMonthly: 2800,
+    priceAnnual: 2240,
     pricePKR: 'PKR 2,800',
-    displayPrice: '$10.00',
+    displayPrice: 'PKR 2,800',
     credits: '500,000 credits',
     creditCount: 500000,
     badge: '',
@@ -68,10 +68,10 @@ const DEFAULT_PLANS_TEMPLATE = [
   {
     id: 'Pro',
     name: 'Pro',
-    priceMonthly: 17,
-    priceAnnual: 13.6,
+    priceMonthly: 4750,
+    priceAnnual: 3800,
     pricePKR: 'PKR 4,750',
-    displayPrice: '$17.00',
+    displayPrice: 'PKR 4,750',
     credits: '1,000,000 credits',
     creditCount: 1000000,
     badge: 'Most Popular',
@@ -96,10 +96,10 @@ const DEFAULT_PLANS_TEMPLATE = [
   {
     id: 'Studio',
     name: 'Studio',
-    priceMonthly: 24,
-    priceAnnual: 19.2,
+    priceMonthly: 6700,
+    priceAnnual: 5360,
     pricePKR: 'PKR 6,700',
-    displayPrice: '$24.00',
+    displayPrice: 'PKR 6,700',
     credits: '3,000,000 credits',
     creditCount: 3000000,
     badge: 'Best Value',
@@ -150,6 +150,7 @@ export default function AdminDashboard({ user, onNavigate }) {
   const [editCredits, setEditCredits] = useState(2000);
   const [editRole, setEditRole] = useState('user');
   const [editStatus, setEditStatus] = useState('active');
+  const [editExpiry, setEditExpiry] = useState('');
   const [editSaving, setEditSaving] = useState(false);
 
   // Platform Generations
@@ -301,10 +302,10 @@ export default function AdminDashboard({ user, onNavigate }) {
     const newPlan = {
       id: newId,
       name: 'Custom Tier',
-      priceMonthly: 35,
-      priceAnnual: 28,
+      priceMonthly: 9800,
+      priceAnnual: 7800,
       pricePKR: 'PKR 9,800',
-      displayPrice: '$35.00',
+      displayPrice: 'PKR 9,800',
       credits: '5,000,000 credits',
       creditCount: 5000000,
       badge: 'New',
@@ -484,6 +485,16 @@ export default function AdminDashboard({ user, onNavigate }) {
     setEditCredits(u.credits || 0);
     setEditRole(u.role || 'user');
     setEditStatus(u.status || 'active');
+    const exp = u.creditsExpiresAt || u.subscriptionEndDate;
+    if (exp) {
+      try {
+        setEditExpiry(new Date(exp).toISOString().split('T')[0]);
+      } catch (e) {
+        setEditExpiry('');
+      }
+    } else {
+      setEditExpiry('');
+    }
   };
 
   // Save Edited User
@@ -493,12 +504,16 @@ export default function AdminDashboard({ user, onNavigate }) {
     setEditSaving(true);
 
     try {
-      const res = await axios.put(`${API_BASE}/api/admin/users/${editingUser.id}`, {
+      const payload = {
         plan: editPlan,
         credits: parseInt(editCredits, 10),
         role: editRole,
-        status: editStatus
-      });
+        status: editStatus,
+        creditsExpiresAt: editPlan === 'Free' ? null : (editExpiry ? new Date(editExpiry).toISOString() : undefined),
+        subscriptionEndDate: editPlan === 'Free' ? null : (editExpiry ? new Date(editExpiry).toISOString() : undefined)
+      };
+
+      const res = await axios.put(`${API_BASE}/api/admin/users/${editingUser.id}`, payload);
 
       if (res.data && res.data.success) {
         setUsers(prev => prev.map(u => u.id === editingUser.id ? { ...u, ...res.data.user } : u));
@@ -1021,6 +1036,17 @@ export default function AdminDashboard({ user, onNavigate }) {
                       <span className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-700 text-white font-bold text-[10px] uppercase">
                         {u.plan}
                       </span>
+                      {u.plan !== 'Free' && (
+                        <div className="text-[10px] text-zinc-400 mt-1 font-sans">
+                          {u.subscriptionStatus?.hasExpiry ? (
+                            <span className={u.subscriptionStatus?.isExpired ? 'text-rose-400 font-bold' : u.subscriptionStatus?.daysRemaining <= 5 ? 'text-amber-400 font-bold' : 'text-emerald-400 font-medium'}>
+                              {u.subscriptionStatus?.isExpired ? 'Expired' : `${u.subscriptionStatus?.daysRemaining}d left (30d)`}
+                            </span>
+                          ) : (
+                            <span className="text-zinc-500">Active</span>
+                          )}
+                        </div>
+                      )}
                     </td>
                     <td className="px-5 py-4 font-bold text-white">
                       ⚡ {u.credits?.toLocaleString()}
@@ -1354,12 +1380,12 @@ export default function AdminDashboard({ user, onNavigate }) {
                     <h4 className="text-base font-extrabold text-white truncate">{p.name}</h4>
                     <div className="mt-2 flex items-baseline gap-1">
                       <span className="text-2xl font-black text-white">
-                        {p.priceMonthly === 0 ? 'FREE' : `$${Number(p.priceMonthly).toFixed(2)}`}
+                        {p.priceMonthly === 0 ? 'FREE' : (p.displayPrice || `PKR ${Number(p.priceMonthly).toLocaleString()}`)}
                       </span>
                       {p.priceMonthly > 0 && <span className="text-xs text-zinc-400">/mo</span>}
                     </div>
                     <div className="text-[11px] text-zinc-400 font-mono mt-0.5">
-                      {p.pricePKR || `PKR ${p.priceMonthly * 280}`}
+                      {p.pricePKR || (p.priceMonthly === 0 ? 'FREE' : `PKR ${Number(p.priceMonthly).toLocaleString()}`)}
                     </div>
                   </div>
 
@@ -1489,30 +1515,36 @@ export default function AdminDashboard({ user, onNavigate }) {
                   {/* SECTION 2: Pricing & Currency */}
                   <div className="p-5 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 space-y-4">
                     <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-400 font-mono">
-                      2. Pricing & Currency Rates
+                      2. PRICING & CURRENCY RATES (PKR)
                     </h4>
 
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs font-bold text-zinc-300 mb-1">
-                          Monthly USD ($)
+                          Monthly Price (PKR)
                         </label>
                         <input
                           type="number"
-                          step="0.01"
+                          step="1"
                           value={currentPlan.priceMonthly ?? 0}
-                          onChange={(e) => updatePlanField(currentPlan.id, 'priceMonthly', parseFloat(e.target.value) || 0)}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value) || 0;
+                            updatePlanField(currentPlan.id, 'priceMonthly', val);
+                            if (!currentPlan.pricePKR || currentPlan.pricePKR.startsWith('PKR')) {
+                              updatePlanField(currentPlan.id, 'pricePKR', `PKR ${val.toLocaleString()}`);
+                            }
+                          }}
                           className="w-full px-3.5 py-2 rounded-xl border text-xs bg-zinc-900 border-zinc-700 text-white font-mono focus:border-emerald-500 focus:outline-none"
                         />
                       </div>
 
                       <div>
                         <label className="block text-xs font-bold text-zinc-300 mb-1">
-                          Annual USD ($ / mo)
+                          Annual Price (PKR / mo)
                         </label>
                         <input
                           type="number"
-                          step="0.01"
+                          step="1"
                           value={currentPlan.priceAnnual ?? 0}
                           onChange={(e) => updatePlanField(currentPlan.id, 'priceAnnual', parseFloat(e.target.value) || 0)}
                           className="w-full px-3.5 py-2 rounded-xl border text-xs bg-zinc-900 border-zinc-700 text-white font-mono focus:border-emerald-500 focus:outline-none"
@@ -1535,12 +1567,13 @@ export default function AdminDashboard({ user, onNavigate }) {
 
                     <div>
                       <label className="block text-xs font-bold text-zinc-300 mb-1">
-                        Display Price Tag <span className="text-zinc-500 text-[10px] font-normal">(Header text, e.g. FREE, $10.00, $17.00)</span>
+                        Display Price Tag <span className="text-zinc-500 text-[10px] font-normal">(Header text, e.g. FREE, PKR 2,800, PKR 4,750)</span>
                       </label>
                       <input
                         type="text"
                         value={currentPlan.displayPrice || ''}
                         onChange={(e) => updatePlanField(currentPlan.id, 'displayPrice', e.target.value)}
+                        placeholder="e.g. FREE or PKR 2,800"
                         className="w-full px-3.5 py-2 rounded-xl border text-xs bg-zinc-900 border-zinc-700 text-white font-mono focus:border-emerald-500 focus:outline-none"
                       />
                     </div>
@@ -2066,6 +2099,34 @@ export default function AdminDashboard({ user, onNavigate }) {
                   <option value="suspended">Suspended</option>
                 </select>
               </div>
+
+              {editPlan !== 'Free' && (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-zinc-300">Credit Expiry Date (30 Days)</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const d = new Date();
+                        d.setDate(d.getDate() + 30);
+                        setEditExpiry(d.toISOString().split('T')[0]);
+                      }}
+                      className="text-[10px] font-bold text-amber-400 hover:text-amber-300 transition-colors cursor-pointer"
+                    >
+                      ⚡ Set 30 Days From Today
+                    </button>
+                  </div>
+                  <input
+                    type="date"
+                    value={editExpiry}
+                    onChange={(e) => setEditExpiry(e.target.value)}
+                    className="w-full px-3.5 py-2 rounded-xl border text-xs bg-zinc-900 border-zinc-700 text-white font-mono"
+                  />
+                  <p className="text-[10px] text-zinc-500 mt-1">
+                    Purchased character credits expire 30 days after activation.
+                  </p>
+                </div>
+              )}
 
               <div className="flex items-center justify-end gap-3 pt-3">
                 <button

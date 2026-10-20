@@ -14,6 +14,7 @@ const userRoutes = require('./routes/user');
 const { bootstrapSuperadmin } = require('./bootstrapSuperadmin');
 const { optionalAuth, authenticateToken, requireAdmin, requireSuperadmin } = require('./middleware/auth');
 const { initScheduledCleanup, cleanupOldAudioFiles } = require('./utils/storageCleanup');
+const { sweepExpiredSubscriptions, checkAndExpireUser } = require('./utils/subscriptionManager');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -751,6 +752,8 @@ app.post(['/api/clone-voice', '/api/generate'], ttsLimiter, optionalAuth, async 
 
   // Account Status & Credit verification for authenticated users
   if (req.user) {
+    req.user = await checkAndExpireUser(req.user);
+
     if (req.user.status === 'suspended') {
       return res.status(403).json({
         success: false,
@@ -759,9 +762,12 @@ app.post(['/api/clone-voice', '/api/generate'], ttsLimiter, optionalAuth, async 
     }
 
     if (req.user.credits < scriptLength) {
+      const isExpired = req.user.plan === 'Free' && req.user.credits === 0;
       return res.status(402).json({
         success: false,
-        error: `Insufficient credits. This generation requires ${scriptLength.toLocaleString()} characters, but your account only has ${req.user.credits.toLocaleString()} credits. Please upgrade your package on the Pricing page.`
+        error: isExpired
+          ? 'Your 30-day character credits subscription has expired. Please upgrade or renew your package on the Pricing page to continue generating voiceovers.'
+          : `Insufficient credits. This generation requires ${scriptLength.toLocaleString()} characters, but your account only has ${req.user.credits.toLocaleString()} credits. Please upgrade your package on the Pricing page.`
       });
     }
   }
@@ -1133,6 +1139,14 @@ const server = app.listen(PORT, async () => {
 
   // Initialize temporary audio storage 24-hour auto-delete scheduler
   initScheduledCleanup({ intervalMinutes: 30, olderThanHours: 24 });
+
+  // Sweep expired 30-day character credit subscriptions and schedule periodic sweeps
+  try {
+    await sweepExpiredSubscriptions();
+    setInterval(sweepExpiredSubscriptions, 30 * 60 * 1000); // Check every 30 minutes
+  } catch (e) {
+    console.warn('[Subscription Scheduler Error]:', e.message);
+  }
 });
 
 // Clean up child process on shutdown

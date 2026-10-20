@@ -5,6 +5,7 @@ const { prisma } = require('../prismaClient');
 const { authenticateToken, requireAdmin, requireSuperadmin } = require('../middleware/auth');
 const { cleanupOldAudioFiles } = require('../utils/storageCleanup');
 const { DEFAULT_PLANS } = require('../utils/defaultPlans');
+const { calculateSubscriptionExpiry, getSubscriptionStatus } = require('../utils/subscriptionManager');
 
 const router = express.Router();
 
@@ -137,6 +138,8 @@ router.get('/users', async (req, res) => {
         status: true,
         plan: true,
         credits: true,
+        subscriptionEndDate: true,
+        creditsExpiresAt: true,
         createdAt: true,
         updatedAt: true,
         _count: {
@@ -145,9 +148,14 @@ router.get('/users', async (req, res) => {
       }
     });
 
+    const enrichedUsers = users.map(u => ({
+      ...u,
+      subscriptionStatus: getSubscriptionStatus(u)
+    }));
+
     return res.json({
       success: true,
-      users,
+      users: enrichedUsers,
       count: users.length
     });
   } catch (err) {
@@ -158,12 +166,12 @@ router.get('/users', async (req, res) => {
 
 /**
  * PUT /api/admin/users/:id
- * Updates a user's plan, credits, role, or status
+ * Updates a user's plan, credits, role, status, or subscription expiry
  */
 router.put('/users/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { plan, credits, role, status, name } = req.body;
+    const { plan, credits, role, status, name, subscriptionEndDate, creditsExpiresAt, extendDays } = req.body;
 
     const targetUser = await prisma.user.findUnique({ where: { id } });
     if (!targetUser) {
@@ -192,6 +200,28 @@ router.put('/users/:id', async (req, res) => {
     if (role && ['user', 'admin', 'superadmin'].includes(role)) updateData.role = role;
     if (status && ['active', 'suspended'].includes(status)) updateData.status = status;
 
+    // Subscription & Credit Expiry handling
+    if (extendDays && !isNaN(parseInt(extendDays, 10))) {
+      const days = parseInt(extendDays, 10);
+      const currentExpiry = targetUser.creditsExpiresAt ? new Date(targetUser.creditsExpiresAt) : null;
+      const baseDate = currentExpiry && currentExpiry.getTime() > Date.now() ? currentExpiry : new Date();
+      const extended = calculateSubscriptionExpiry(baseDate, days);
+      updateData.subscriptionEndDate = extended;
+      updateData.creditsExpiresAt = extended;
+    } else if (subscriptionEndDate !== undefined || creditsExpiresAt !== undefined) {
+      const targetDate = creditsExpiresAt || subscriptionEndDate;
+      updateData.subscriptionEndDate = targetDate ? new Date(targetDate) : null;
+      updateData.creditsExpiresAt = targetDate ? new Date(targetDate) : null;
+    } else if (plan === 'Free') {
+      updateData.subscriptionEndDate = null;
+      updateData.creditsExpiresAt = null;
+    } else if (plan && ['Lite', 'Pro', 'Studio'].includes(plan) && targetUser.plan === 'Free') {
+      // Upgrading to paid tier defaults to 30 days validity
+      const thirtyDayExpiry = calculateSubscriptionExpiry(new Date(), 30);
+      updateData.subscriptionEndDate = thirtyDayExpiry;
+      updateData.creditsExpiresAt = thirtyDayExpiry;
+    }
+
     const updated = await prisma.user.update({
       where: { id },
       data: updateData,
@@ -203,14 +233,33 @@ router.put('/users/:id', async (req, res) => {
         status: true,
         plan: true,
         credits: true,
+        subscriptionEndDate: true,
+        creditsExpiresAt: true,
         updatedAt: true
       }
     });
 
+    // Sync raw PostgreSQL columns
+    try {
+      await prisma.$executeRawUnsafe(
+        `UPDATE users SET plan_type = $1, characters_left = $2, subscription_end_date = $3, credits_expires_at = $4 WHERE id = $5`,
+        updated.plan,
+        updated.credits,
+        updated.subscriptionEndDate,
+        updated.creditsExpiresAt,
+        updated.id
+      );
+    } catch (e) {
+      // Non-blocking sync
+    }
+
     return res.json({
       success: true,
       message: `User ${updated.email} updated successfully!`,
-      user: updated
+      user: {
+        ...updated,
+        subscriptionStatus: getSubscriptionStatus(updated)
+      }
     });
   } catch (err) {
     console.error('[Admin API Update User Error]:', err);
@@ -432,8 +481,8 @@ router.post('/plans', async (req, res) => {
       name: String(p.name || p.id || 'Unnamed Plan').trim(),
       priceMonthly: Number(p.priceMonthly) >= 0 ? Number(p.priceMonthly) : 0,
       priceAnnual: Number(p.priceAnnual) >= 0 ? Number(p.priceAnnual) : 0,
-      pricePKR: String(p.pricePKR || `PKR ${(Number(p.priceMonthly) || 0) * 280}`).trim(),
-      displayPrice: Number(p.priceMonthly) === 0 ? 'FREE' : (p.displayPrice || `$${Number(p.priceMonthly).toFixed(2)}`),
+      pricePKR: String(p.pricePKR || (Number(p.priceMonthly) === 0 ? 'PKR 0' : `PKR ${Number(p.priceMonthly).toLocaleString()}`)).trim(),
+      displayPrice: Number(p.priceMonthly) === 0 ? 'FREE' : String(p.displayPrice || `PKR ${Number(p.priceMonthly).toLocaleString()}`).replace(/\$/g, 'PKR ').trim(),
       credits: String(p.credits || `${(Number(p.creditCount) || 0).toLocaleString()} credits`),
       creditCount: parseInt(p.creditCount, 10) >= 0 ? parseInt(p.creditCount, 10) : 0,
       badge: p.badge ? String(p.badge).trim() : null,
@@ -585,6 +634,9 @@ router.all('/manual-payments/:id/approve', async (req, res) => {
     const currentCredits = payment.user.credits || 0;
     const newTotalCredits = currentCredits + creditsToAdd;
 
+    // Calculate 30-day credit validity expiry from time of purchase/approval
+    const thirtyDaysExpiry = calculateSubscriptionExpiry(new Date(), 30);
+
     // Atomic update in a transaction
     const [updatedPayment, updatedUser] = await prisma.$transaction([
       prisma.manualPayment.update({
@@ -598,7 +650,9 @@ router.all('/manual-payments/:id/approve', async (req, res) => {
         where: { id: payment.userId },
         data: {
           plan: payment.planType,
-          credits: newTotalCredits
+          credits: newTotalCredits,
+          subscriptionEndDate: thirtyDaysExpiry,
+          creditsExpiresAt: thirtyDaysExpiry
         },
         select: {
           id: true,
@@ -607,7 +661,9 @@ router.all('/manual-payments/:id/approve', async (req, res) => {
           plan: true,
           credits: true,
           role: true,
-          status: true
+          status: true,
+          subscriptionEndDate: true,
+          creditsExpiresAt: true
         }
       })
     ]);
@@ -615,22 +671,27 @@ router.all('/manual-payments/:id/approve', async (req, res) => {
     // Also sync the raw columns plan_type and characters_left in PostgreSQL
     try {
       await prisma.$executeRawUnsafe(
-        `UPDATE users SET plan_type = $1, characters_left = $2 WHERE id = $3`,
+        `UPDATE users SET plan_type = $1, characters_left = $2, subscription_end_date = $3, credits_expires_at = $4 WHERE id = $5`,
         payment.planType,
         newTotalCredits,
+        thirtyDaysExpiry,
+        thirtyDaysExpiry,
         payment.userId
       );
     } catch (rawErr) {
       // Non-blocking sync
     }
 
-    console.log(`[Admin Payment Approval] Approved TID=${payment.transactionId} for User=${payment.user.email}. Plan=${payment.planType}, Credits=${newTotalCredits}`);
+    console.log(`[Admin Payment Approval] Approved TID=${payment.transactionId} for User=${payment.user.email}. Plan=${payment.planType}, Credits=${newTotalCredits}, ExpiresAt=${thirtyDaysExpiry.toISOString()}`);
 
     return res.json({
       success: true,
-      message: `Payment approved! User ${payment.user.name || payment.user.email} upgraded to ${payment.planType} plan with ${newTotalCredits.toLocaleString()} characters.`,
+      message: `Payment approved! User ${payment.user.name || payment.user.email} upgraded to ${payment.planType} plan with ${newTotalCredits.toLocaleString()} characters (valid for 30 days until ${thirtyDaysExpiry.toLocaleDateString()}).`,
       payment: updatedPayment,
-      user: updatedUser
+      user: {
+        ...updatedUser,
+        subscriptionStatus: getSubscriptionStatus(updatedUser)
+      }
     });
   } catch (err) {
     console.error('[Admin Payment Approval Error]:', err);

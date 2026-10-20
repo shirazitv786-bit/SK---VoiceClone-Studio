@@ -27,9 +27,10 @@ const DEFAULT_PLANS = [
   {
     id: 'Lite',
     name: 'Lite',
-    priceMonthly: 10,
-    priceAnnual: 8,
-    displayPrice: '$10.00',
+    priceMonthly: 2800,
+    priceAnnual: 2240,
+    pricePKR: 'PKR 2,800',
+    displayPrice: 'PKR 2,800',
     credits: '500,000 credits',
     creditCount: 500000,
     badge: null,
@@ -48,9 +49,10 @@ const DEFAULT_PLANS = [
   {
     id: 'Pro',
     name: 'Pro',
-    priceMonthly: 17,
-    priceAnnual: 13.6,
-    displayPrice: '$17.00',
+    priceMonthly: 4750,
+    priceAnnual: 3800,
+    pricePKR: 'PKR 4,750',
+    displayPrice: 'PKR 4,750',
     credits: '1,000,000 credits',
     creditCount: 1000000,
     badge: 'Most Popular',
@@ -71,9 +73,10 @@ const DEFAULT_PLANS = [
   {
     id: 'Studio',
     name: 'Studio',
-    priceMonthly: 24,
-    priceAnnual: 19.2,
-    displayPrice: '$24.00',
+    priceMonthly: 6700,
+    priceAnnual: 5360,
+    pricePKR: 'PKR 6,700',
+    displayPrice: 'PKR 6,700',
     credits: '3,000,000 credits',
     creditCount: 3000000,
     badge: 'Best Value',
@@ -197,6 +200,10 @@ export default function PricingPage({
       a: 'Cloned reference voice credits allow you to upload unique custom 5-second voice samples and permanently save them to your custom voice registry for instant reuse whenever you synthesize audio.'
     },
     {
+      q: 'How long are purchased character credits valid?',
+      a: 'All character credits in Lite, Pro, and Studio packages are valid for 30 days from the date of activation. Unused credits expire after 30 days. You can easily renew or top up your package anytime to keep your voice synthesis active.'
+    },
+    {
       q: 'Can I cancel or change my plan anytime?',
       a: 'Absolutely. You can upgrade, downgrade, or cancel at any time. When upgrading, your credits and features update immediately with pro-rated billing.'
     }
@@ -290,8 +297,8 @@ export default function PricingPage({
                       </span>
                     ) : (
                       <>
-                        <span className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-                          ${price.toFixed(2)}
+                        <span className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                          PKR {Number(price || 0).toLocaleString()}
                         </span>
                         <span className="text-xs text-zinc-400 font-medium">
                           /month

@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const { prisma } = require('../prismaClient');
+const { checkAndExpireUser } = require('../utils/subscriptionManager');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'sk_voiceclone_studio_secret_key_jwt_2026_production_v1';
 const TOKEN_EXPIRY = '30d';
@@ -37,7 +38,7 @@ const authenticateToken = async (req, res, next) => {
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     
-    // Fetch fresh user record from database
+    // Fetch fresh user record from database including subscription expiration fields
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
       select: {
@@ -48,6 +49,8 @@ const authenticateToken = async (req, res, next) => {
         status: true,
         plan: true,
         credits: true,
+        subscriptionEndDate: true,
+        creditsExpiresAt: true,
         createdAt: true
       }
     });
@@ -66,7 +69,9 @@ const authenticateToken = async (req, res, next) => {
       });
     }
 
-    req.user = user;
+    // Verify 30-day credit validity and automatically expire credits if past 30 days
+    const activeUser = await checkAndExpireUser(user);
+    req.user = activeUser || user;
     next();
   } catch (err) {
     if (err.name === 'TokenExpiredError') {
@@ -97,7 +102,7 @@ const optionalAuth = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    const user = await prisma.user.findUnique({
+    let user = await prisma.user.findUnique({
       where: { id: decoded.userId },
       select: {
         id: true,
@@ -106,7 +111,9 @@ const optionalAuth = async (req, res, next) => {
         role: true,
         status: true,
         plan: true,
-        credits: true
+        credits: true,
+        subscriptionEndDate: true,
+        creditsExpiresAt: true
       }
     });
 
@@ -115,6 +122,10 @@ const optionalAuth = async (req, res, next) => {
         success: false,
         error: 'This account has been suspended by an administrator. Access is blocked.'
       });
+    }
+
+    if (user) {
+      user = await checkAndExpireUser(user);
     }
 
     req.user = user || null;

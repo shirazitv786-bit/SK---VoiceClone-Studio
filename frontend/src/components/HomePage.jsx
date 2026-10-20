@@ -458,7 +458,7 @@ export default function HomePage({
               Plans Starting From <span className="text-emerald-400">FREE</span>
             </h2>
             <p className="text-xs sm:text-sm text-zinc-400 mt-3 leading-relaxed">
-              Explore our 4 transparent tiers: <strong className="text-white">Free (2k credits)</strong>, <strong className="text-white">Lite ($10/mo)</strong>, <strong className="text-white">Pro ($17/mo)</strong>, and <strong className="text-white">Studio ($24/mo)</strong> with up to 3,000,000 characters and 30 cloned voices.
+              Explore our 4 transparent tiers: <strong className="text-white">Free (2k credits)</strong>, <strong className="text-white">Lite (PKR 2,800/mo)</strong>, <strong className="text-white">Pro (PKR 4,750/mo)</strong>, and <strong className="text-white">Studio (PKR 6,700/mo)</strong> with up to 3,000,000 characters and 30 cloned voices.
             </p>
             <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
               <button

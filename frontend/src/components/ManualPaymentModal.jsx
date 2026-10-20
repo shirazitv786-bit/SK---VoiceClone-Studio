@@ -24,14 +24,12 @@ export default function ManualPaymentModal({
   const DEFAULT_PLAN_DETAILS = {
     Lite: {
       name: 'Lite Plan',
-      priceUSD: '$10.00',
       pricePKR: 'PKR 2,800',
       credits: '500,000 characters',
       features: '5 Custom Voices • 5,000 chars/generation • Multilingual V2'
     },
     Pro: {
       name: 'Pro Plan',
-      priceUSD: '$17.00',
       pricePKR: 'PKR 4,750',
       credits: '1,000,000 characters',
       popular: true,
@@ -39,7 +37,6 @@ export default function ManualPaymentModal({
     },
     Studio: {
       name: 'Studio Plan',
-      priceUSD: '$24.00',
       pricePKR: 'PKR 6,700',
       credits: '3,000,000 characters',
       features: '30 Custom Voices • 7,000 chars/gen • Turbo V3 + Commercial Rights'
@@ -57,8 +54,7 @@ export default function ManualPaymentModal({
           res.data.plans.filter(p => p.id !== 'Free' && p.isEnabled !== false).forEach(p => {
             map[p.id] = {
               name: p.name || `${p.id} Plan`,
-              priceUSD: p.displayPrice || `$${Number(p.priceMonthly || 0).toFixed(2)}`,
-              pricePKR: p.pricePKR || `PKR ${Number(p.priceMonthly || 0) * 280}`,
+              pricePKR: p.pricePKR || (p.displayPrice && p.displayPrice.includes('PKR') ? p.displayPrice : `PKR ${Number(p.priceMonthly || 0).toLocaleString()}`),
               credits: `${(Number(p.creditCount) || 0).toLocaleString()} characters`,
               popular: Boolean(p.highlight || p.badge?.toLowerCase().includes('popular')),
               features: Array.isArray(p.features) ? p.features.slice(0, 3).join(' • ') : (p.desc || '')
@@ -126,7 +122,7 @@ export default function ManualPaymentModal({
       const formData = new FormData();
       formData.append('transactionId', cleanTid);
       formData.append('planType', selectedPlan);
-      formData.append('amount', `${currentPlanInfo.priceUSD} / ${currentPlanInfo.pricePKR}`);
+      formData.append('amount', currentPlanInfo.pricePKR || `PKR Standard`);
       if (senderNumber.trim()) {
         formData.append('senderNumber', senderNumber.trim());
       }
@@ -208,6 +204,10 @@ export default function ManualPaymentModal({
               <div className="flex justify-between items-center pb-2 border-b border-zinc-800">
                 <span className="text-zinc-400">Allotted Balance:</span>
                 <span className="font-mono text-zinc-200">{currentPlanInfo.credits}</span>
+              </div>
+              <div className="flex justify-between items-center pb-2 border-b border-zinc-800">
+                <span className="text-zinc-400">Validity Period:</span>
+                <span className="font-mono text-emerald-400 font-bold">30 Days from Approval</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-zinc-400">Status:</span>
@@ -296,7 +296,7 @@ export default function ManualPaymentModal({
                   2. Send Fee To This JazzCash Account
                 </span>
                 <span className="text-xs font-mono font-bold text-emerald-400">
-                  Payable: {currentPlanInfo.pricePKR} ({currentPlanInfo.priceUSD})
+                  Payable: {currentPlanInfo.pricePKR}
                 </span>
               </div>
 
