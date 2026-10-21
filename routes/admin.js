@@ -624,12 +624,12 @@ router.all('/manual-payments/:id/approve', async (req, res) => {
       if (matchedPlan && typeof matchedPlan.creditCount === 'number' && matchedPlan.creditCount > 0) {
         creditsToAdd = matchedPlan.creditCount;
       } else {
-        const fallbackMap = { Lite: 500000, Pro: 1000000, Studio: 3000000 };
-        creditsToAdd = fallbackMap[payment.planType] || 500000;
+        const fallbackMap = { Starter: 100000, Silver: 250000, Lite: 500000, Pro: 1000000, Studio: 3000000 };
+        creditsToAdd = fallbackMap[payment.planType] || 250000;
       }
     } catch (e) {
-      const fallbackMap = { Lite: 500000, Pro: 1000000, Studio: 3000000 };
-      creditsToAdd = fallbackMap[payment.planType] || 500000;
+      const fallbackMap = { Starter: 100000, Silver: 250000, Lite: 500000, Pro: 1000000, Studio: 3000000 };
+      creditsToAdd = fallbackMap[payment.planType] || 250000;
     }
     const currentCredits = payment.user.credits || 0;
     const newTotalCredits = currentCredits + creditsToAdd;

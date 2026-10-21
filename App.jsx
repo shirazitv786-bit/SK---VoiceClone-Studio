@@ -47,7 +47,7 @@ const updateSeoMetadata = (page) => {
     pricing: {
       url: `${origin}/pricing`,
       title: 'Commercial Packages & Pricing Plans | SK - VoiceClone Studio',
-      description: 'Flexible, transparent pricing packages for commercial voice cloning and neural TTS synthesis. Free, Lite, Pro, and Studio tiers with broadcast rights.'
+      description: 'Flexible, transparent pricing packages for commercial voice cloning and neural TTS synthesis. Free, Silver, Lite, Pro, and Studio tiers with broadcast rights.'
     },
     studio: {
       url: `${origin}/studio`,

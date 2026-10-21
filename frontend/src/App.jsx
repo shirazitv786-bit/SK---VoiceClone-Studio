@@ -6,7 +6,9 @@ import PricingPage from './components/PricingPage';
 import StudioPage from './components/StudioPage';
 import UserDashboard from './components/UserDashboard';
 import AdminDashboard from './components/AdminDashboard';
+import VoicesPage from './components/VoicesPage';
 import AuthModal from './components/AuthModal';
+import AuthPage from './components/AuthPage';
 import ManualPaymentModal from './components/ManualPaymentModal';
 import Footer from './components/Footer';
 
@@ -21,17 +23,23 @@ const API_BASE = isLocalDev ? 'http://localhost:5000' : '';
  * Maps a URL pathname to an internal active page state.
  * Supported routes:
  *   '/'          -> 'home'
+ *   '/voices'    -> 'voices'
  *   '/pricing'   -> 'pricing'
  *   '/studio'    -> 'studio'
  *   '/dashboard' -> 'dashboard'
  *   '/admin'     -> 'admin'
+ *   '/login'     -> 'login'
+ *   '/register'  -> 'register'
  */
 const getPageFromPath = (path) => {
   const cleanPath = (path || '').toLowerCase().replace(/\/$/, '') || '/';
+  if (cleanPath === '/voices') return 'voices';
   if (cleanPath === '/pricing') return 'pricing';
   if (cleanPath === '/studio') return 'studio';
   if (cleanPath === '/dashboard') return 'dashboard';
   if (cleanPath === '/admin') return 'admin';
+  if (cleanPath === '/login' || cleanPath === '/signin') return 'login';
+  if (cleanPath === '/register' || cleanPath === '/signup') return 'register';
   return 'home';
 };
 
@@ -49,10 +57,15 @@ const updateSeoMetadata = (page) => {
       title: 'SK - VoiceClone Studio | Commercial AI Voice Cloning & Neural Speech Synthesis',
       description: 'Create lifelike neural voice clones in seconds with SK - VoiceClone Studio. 120+ natural voices across 35+ languages with commercial rights.'
     },
+    voices: {
+      url: `${origin}/voices`,
+      title: '120+ Studio Neural Voices & Dialects | SK - VoiceClone Studio',
+      description: 'Explore and audition all 120+ commercial neural AI voices across 35+ languages. Preview in real-time and launch directly into the Studio workstation.'
+    },
     pricing: {
       url: `${origin}/pricing`,
       title: 'Commercial Packages & Pricing Plans | SK - VoiceClone Studio',
-      description: 'Flexible, transparent pricing packages for commercial voice cloning and neural TTS synthesis. Free, Lite, Pro, and Studio tiers with broadcast rights.'
+      description: 'Flexible, transparent pricing packages for commercial voice cloning and neural TTS synthesis. Free, Silver, Lite, Pro, and Studio tiers with broadcast rights.'
     },
     studio: {
       url: `${origin}/studio`,
@@ -68,6 +81,16 @@ const updateSeoMetadata = (page) => {
       url: `${origin}/admin`,
       title: 'Platform Control & Superadmin Console | SK - VoiceClone Studio',
       description: 'System metrics, user management, and moderation controls for SK - VoiceClone Studio.'
+    },
+    login: {
+      url: `${origin}/login`,
+      title: 'Sign In to Studio | SK - VoiceClone Studio',
+      description: 'Sign in to access your cloned voices, workstation, and audio generation history.'
+    },
+    register: {
+      url: `${origin}/register`,
+      title: 'Create Account & Claim 2,000 Credits | SK - VoiceClone Studio',
+      description: 'Sign up for free and get 2,000 complimentary neural speech credits to clone voices and synthesize studio-quality speech.'
     }
   };
 
@@ -294,18 +317,18 @@ export default function App() {
     checkServer();
   }, []);
 
-  // Monochromatic Luxury Theme (Black & White with subtle zinc - Permanent Dark)
+  // Clean Modern Light Theme (High Contrast Zinc & Slate)
   const theme = {
-    bg: 'bg-[#09090b] text-zinc-100',
-    headerBg: 'bg-[#09090b]/95 border-zinc-800/80',
-    cardBg: 'bg-[#121215] border-zinc-800/80 shadow-2xl',
-    panelBg: 'bg-[#18181b]/80 border-zinc-800',
-    inputBg: 'bg-[#18181b] border-zinc-800 text-zinc-100 placeholder-zinc-500 focus:border-zinc-500 focus:ring-zinc-600',
-    sidebarBg: 'bg-[#121215] border-zinc-800/80 shadow-2xl',
-    textMuted: 'text-zinc-400',
-    border: 'border-zinc-800',
-    btnPrimary: 'bg-white hover:bg-zinc-200 text-black shadow-md shadow-white/5 active:scale-[0.99] font-bold',
-    btnSecondary: 'bg-zinc-900 hover:bg-zinc-800 text-zinc-100 border border-zinc-700/80 shadow-sm active:scale-[0.99]'
+    bg: 'bg-[#f8fafc] text-zinc-900',
+    headerBg: 'bg-white/95 border-zinc-200/80 shadow-sm backdrop-blur-md',
+    cardBg: 'bg-white border-zinc-200/90 shadow-sm',
+    panelBg: 'bg-zinc-50 border-zinc-200',
+    inputBg: 'bg-white border-zinc-300 text-zinc-900 placeholder-zinc-400 focus:border-zinc-900 focus:ring-zinc-900',
+    sidebarBg: 'bg-white border-zinc-200/90 shadow-sm',
+    textMuted: 'text-zinc-500',
+    border: 'border-zinc-200',
+    btnPrimary: 'bg-zinc-900 hover:bg-zinc-800 text-white shadow-sm active:scale-[0.99] font-bold',
+    btnSecondary: 'bg-white hover:bg-zinc-50 text-zinc-800 border border-zinc-300 shadow-sm active:scale-[0.99]'
   };
 
   // Auth Handlers
@@ -418,7 +441,7 @@ export default function App() {
     }
 
     setActivePage(page);
-    const targetPath = page === 'pricing' ? '/pricing' : page === 'studio' ? '/studio' : page === 'dashboard' ? '/dashboard' : page === 'admin' ? '/admin' : '/';
+    const targetPath = page === 'voices' ? '/voices' : page === 'pricing' ? '/pricing' : page === 'studio' ? '/studio' : page === 'dashboard' ? '/dashboard' : page === 'admin' ? '/admin' : '/';
 
     if (typeof window !== 'undefined') {
       if (window.location.pathname !== targetPath) {
@@ -437,20 +460,20 @@ export default function App() {
   };
 
   return (
-    <div className={`min-h-screen ${theme.bg} font-sans flex flex-col relative overflow-x-clip selection:bg-zinc-800 selection:text-white`}>
-      {/* Background Logo Watermark (Monochromatic Invert) */}
+    <div className={`min-h-screen ${theme.bg} font-sans flex flex-col relative overflow-x-clip selection:bg-zinc-200 selection:text-zinc-900`}>
+      {/* Background Logo Watermark (Light Theme Subtle Ambient) */}
       <div
         className="fixed inset-0 pointer-events-none z-0 flex items-center justify-end overflow-hidden select-none logo-watermark-layer pr-4 sm:pr-8 md:pr-12 lg:pr-16"
         aria-hidden="true"
       >
         <div
           className="flex flex-col items-center justify-center text-center logo-watermark-content"
-          style={{ opacity: 0.19 }}
+          style={{ opacity: 0.05 }}
         >
           <img
             src="/favicon.svg"
             alt="SK - VoiceClone Studio Logo Watermark"
-            className="w-[400px] h-[400px] sm:w-[540px] sm:h-[540px] md:w-[680px] md:h-[680px] lg:w-[820px] lg:h-[820px] max-w-[95vw] max-h-[90vh] object-contain logo-watermark-img invert brightness-125 drop-shadow-[0_0_80px_rgba(255,255,255,0.18)]"
+            className="w-[400px] h-[400px] sm:w-[540px] sm:h-[540px] md:w-[680px] md:h-[680px] lg:w-[820px] lg:h-[820px] max-w-[95vw] max-h-[90vh] object-contain logo-watermark-img opacity-50"
             draggable={false}
           />
         </div>
@@ -555,6 +578,21 @@ export default function App() {
             onNavigate={handleNavigate}
             onOpenAuth={handleOpenAuth}
             dynamicPlans={plans}
+          />
+        )}
+
+        {activePage === 'voices' && (
+          <VoicesPage
+            onNavigate={handleNavigate}
+            user={user}
+          />
+        )}
+
+        {(activePage === 'login' || activePage === 'register') && (
+          <AuthPage
+            initialMode={activePage === 'register' ? 'signup' : 'login'}
+            onNavigate={handleNavigate}
+            onLoginSuccess={handleLoginSuccess}
           />
         )}
       </main>

@@ -24,15 +24,17 @@ export default function Navbar({
   }, []);
 
   const planBadgeColors = {
-    Free: 'bg-zinc-800 text-zinc-300 border-zinc-700',
-    Lite: 'bg-zinc-800 text-zinc-200 border-zinc-700',
-    Pro: 'bg-white text-black border-white font-extrabold',
-    Studio: 'bg-zinc-100 text-black border-zinc-300 font-extrabold'
+    Free: 'bg-zinc-100 text-zinc-700 border-zinc-300',
+    Silver: 'bg-zinc-200 text-zinc-800 border-zinc-300 font-bold',
+    Lite: 'bg-zinc-100 text-zinc-700 border-zinc-300',
+    Pro: 'bg-zinc-900 text-white border-zinc-900 font-extrabold',
+    Studio: 'bg-zinc-900 text-white border-zinc-900 font-extrabold'
   };
 
   // Show Studio and Dashboard when logged in, and Admin Console if admin/superadmin
   const navLinks = [
     { id: 'home', label: 'Home' },
+    { id: 'voices', label: 'Voices' },
     ...(user ? [{ id: 'studio', label: 'Studio' }] : []),
     { id: 'pricing', label: 'Pricing' },
     ...(user ? [{ id: 'dashboard', label: 'Dashboard' }] : []),
@@ -40,7 +42,7 @@ export default function Navbar({
   ];
 
   return (
-    <nav className="sticky top-0 z-40 w-full border-b backdrop-blur-xl px-4 sm:px-6 py-3 transition-colors duration-200 bg-[#09090b]/95 border-zinc-800/80 text-white">
+    <nav className="sticky top-0 z-40 w-full border-b backdrop-blur-xl px-4 sm:px-6 py-3 transition-colors duration-200 bg-white/95 border-zinc-200/90 text-zinc-900 shadow-sm">
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
         {/* Brand Logo & Name */}
         <div className="flex items-center gap-3">
@@ -48,23 +50,23 @@ export default function Navbar({
             onClick={() => onNavigate('home')}
             className="flex items-center gap-2.5 text-left group focus:outline-none"
           >
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 bg-white text-black shadow-md shadow-white/5">
-              <svg width="20" height="20" className="w-5 h-5 fill-none stroke-current" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2.5"
-                  d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z"
-                />
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 bg-gradient-to-tr from-violet-600 via-indigo-600 to-indigo-500 text-white shadow-md shadow-violet-500/25">
+              {/* Voice Soundwave Waveform Mark */}
+              <svg width="20" height="20" className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                <rect x="2" y="9" width="2.5" height="6" rx="1.25" />
+                <rect x="6.5" y="5" width="2.5" height="14" rx="1.25" />
+                <rect x="11" y="2" width="2.5" height="20" rx="1.25" />
+                <rect x="15.5" y="6" width="2.5" height="12" rx="1.25" />
+                <rect x="20" y="10" width="2.5" height="4" rx="1.25" />
               </svg>
             </div>
-            <div>
-              <span className="text-base sm:text-lg font-extrabold tracking-tight leading-none text-white block">
-                SK - VoiceClone Studio
+            <div className="flex items-center gap-1.5">
+              <span className="text-base sm:text-lg font-extrabold tracking-tight text-zinc-900">
+                SK VoiceClone
               </span>
-              <p className="text-[11px] text-zinc-400 mt-0.5 hidden sm:block font-medium">
-                Commercial Speech & Neural Cloning Suite
-              </p>
+              <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-md bg-violet-100 text-violet-700">
+                AI
+              </span>
             </div>
           </button>
         </div>
@@ -79,23 +81,14 @@ export default function Navbar({
                 onClick={() => onNavigate(link.id)}
                 className={`relative px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
                   isActive
-                    ? 'bg-white text-black font-bold shadow-sm'
-                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
+                    ? 'bg-zinc-900 text-white font-bold shadow-xs'
+                    : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100/80'
                 }`}
               >
                 {link.label}
               </button>
             );
           })}
-
-          {/* Voices Link without pill */}
-          <button
-            onClick={() => onNavigate('home', '#voices')}
-            className="px-4 py-2 rounded-xl text-sm font-medium transition-all text-zinc-400 hover:text-white hover:bg-zinc-800/60"
-            title="Browse all 120 voices across 35+ languages"
-          >
-            Voices
-          </button>
         </div>
 
         {/* Right Action Controls */}
@@ -103,14 +96,14 @@ export default function Navbar({
           {/* Server Connection Status Pill */}
           {serverOnline === false ? (
             <div
-              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20"
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-50 text-rose-600 border border-rose-200"
               title="Backend server offline: Run 'node server.js'"
             >
-              <span className="w-2 h-2 rounded-full bg-rose-400"></span>
+              <span className="w-2 h-2 rounded-full bg-rose-500"></span>
               <span className="hidden xl:inline">Engine Offline</span>
             </div>
           ) : (
-            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border bg-zinc-900 text-zinc-300 border-zinc-800">
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border bg-zinc-50 text-zinc-700 border-zinc-200">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
               <span className="hidden xl:inline">120 Voices Ready</span>
             </div>
@@ -124,23 +117,23 @@ export default function Navbar({
                 {/* Credits Pill (Clickable -> Opens Pricing) */}
                 <button
                   onClick={() => onNavigate('pricing')}
-                  className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all bg-zinc-900 border-zinc-800 text-zinc-200 hover:bg-zinc-800"
+                  className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all bg-indigo-50/80 border-indigo-200/90 text-indigo-950 hover:bg-indigo-100 hover:border-indigo-300 shadow-xs"
                   title="View your credit allocation or upgrade packages"
                 >
-                  <span className="text-zinc-400">⚡</span>
-                  <span className="text-white font-mono">{user.credits?.toLocaleString() || '2,000'}</span>
-                  <span className="hidden xl:inline text-[11px] font-normal text-zinc-400">credits</span>
+                  <span className="text-indigo-600 font-bold">⚡</span>
+                  <span className="font-mono font-extrabold">{user.credits?.toLocaleString() || '2,000'}</span>
+                  <span className="hidden xl:inline text-[11px] font-medium text-indigo-600/80">credits</span>
                 </button>
 
                 {/* User Avatar & Dropdown Trigger */}
                 <button
                   onClick={() => setUserDropdownOpen(!userDropdownOpen)}
-                  className="flex items-center gap-2 p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl border transition-all border-zinc-800 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
+                  className="flex items-center gap-2 p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl border transition-all border-zinc-200 bg-zinc-100 text-zinc-800 hover:bg-zinc-200/80 shadow-sm"
                 >
-                  <div className="w-6 h-6 rounded-lg bg-white text-black font-extrabold text-xs flex items-center justify-center shrink-0 uppercase">
+                  <div className="w-6 h-6 rounded-lg bg-zinc-900 text-white font-extrabold text-xs flex items-center justify-center shrink-0 uppercase">
                     {user.name ? user.name[0] : 'U'}
                   </div>
-                  <span className="hidden md:inline text-xs font-semibold max-w-[100px] truncate text-white">
+                  <span className="hidden md:inline text-xs font-semibold max-w-[100px] truncate text-zinc-900">
                     {user.name || 'Creator'}
                   </span>
                   <span className={`text-[10px] px-1.5 py-0.5 rounded border uppercase font-mono font-bold ${planBadgeColors[user.plan] || planBadgeColors.Free}`}>
@@ -154,17 +147,17 @@ export default function Navbar({
 
               {/* User Dropdown Menu */}
               {userDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-64 rounded-2xl border p-2 shadow-2xl z-50 animate-fadeIn bg-[#121215] border-zinc-800 text-zinc-200">
-                  <div className="px-3 py-2.5 border-b border-zinc-800/80 mb-1">
-                    <p className="text-xs font-bold truncate text-white">{user.name || 'Studio Creator'}</p>
-                    <p className="text-[11px] text-zinc-400 truncate">{user.email || 'user@voiceclone.ai'}</p>
+                <div className="absolute right-0 mt-2 w-64 rounded-2xl border p-2 shadow-xl z-50 animate-fadeIn bg-white border-zinc-200 text-zinc-800">
+                  <div className="px-3 py-2.5 border-b border-zinc-100 mb-1">
+                    <p className="text-xs font-bold truncate text-zinc-900">{user.name || 'Studio Creator'}</p>
+                    <p className="text-[11px] text-zinc-500 truncate">{user.email || 'user@voiceclone.ai'}</p>
                     <div className="mt-2 flex items-center justify-between text-xs">
-                      <span className="text-zinc-400">Current Plan:</span>
-                      <span className="font-bold text-white">{user.plan || 'Free Plan'}</span>
+                      <span className="text-zinc-500">Current Plan:</span>
+                      <span className="font-bold text-zinc-900">{user.plan || 'Free Plan'}</span>
                     </div>
                     <div className="mt-1 flex items-center justify-between text-xs">
-                      <span className="text-zinc-400">Credits Remaining:</span>
-                      <span className="font-mono font-bold text-white">⚡ {user.credits?.toLocaleString() || '2,000'}</span>
+                      <span className="text-zinc-500">Credits Remaining:</span>
+                      <span className="font-mono font-bold text-zinc-900">⚡ {user.credits?.toLocaleString() || '2,000'}</span>
                     </div>
                   </div>
 
@@ -173,7 +166,7 @@ export default function Navbar({
                       setUserDropdownOpen(false);
                       onNavigate('dashboard');
                     }}
-                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-2 transition-colors hover:bg-zinc-800/80 text-zinc-300 hover:text-white"
+                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-2 transition-colors hover:bg-zinc-100 text-zinc-700 hover:text-zinc-900"
                   >
                     <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h7" />
@@ -186,7 +179,7 @@ export default function Navbar({
                       setUserDropdownOpen(false);
                       onNavigate('studio');
                     }}
-                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-2 transition-colors hover:bg-zinc-800/80 text-zinc-300 hover:text-white"
+                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-2 transition-colors hover:bg-zinc-100 text-zinc-700 hover:text-zinc-900"
                   >
                     <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z" />
@@ -200,7 +193,7 @@ export default function Navbar({
                         setUserDropdownOpen(false);
                         onNavigate('admin');
                       }}
-                      className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors hover:bg-zinc-800 text-white"
+                      className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors hover:bg-zinc-100 text-zinc-900"
                     >
                       <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
@@ -214,7 +207,7 @@ export default function Navbar({
                       setUserDropdownOpen(false);
                       onNavigate('pricing');
                     }}
-                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-2 transition-colors hover:bg-zinc-800/80 text-zinc-200 hover:text-white"
+                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-2 transition-colors hover:bg-zinc-100 text-zinc-700 hover:text-zinc-900"
                   >
                     <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -222,14 +215,14 @@ export default function Navbar({
                     <span>Upgrade Packages</span>
                   </button>
 
-                  <div className="border-t border-zinc-800/80 my-1"></div>
+                  <div className="border-t border-zinc-100 my-1"></div>
 
                   <button
                     onClick={() => {
                       setUserDropdownOpen(false);
                       onLogout();
                     }}
-                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-rose-400 flex items-center gap-2 transition-colors hover:bg-rose-500/10"
+                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 flex items-center gap-2 transition-colors hover:bg-rose-50"
                   >
                     <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -240,20 +233,19 @@ export default function Navbar({
               )}
             </div>
           ) : (
-            /* Logged Out: Black & White Login & Signup Buttons */
+            /* Logged Out: Clean Sign In & Try Free Buttons Matching UI Design */
             <div className="flex items-center gap-2">
               <button
                 onClick={() => onOpenAuth('login')}
-                className="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all text-zinc-300 hover:text-white hover:bg-zinc-900 border border-transparent hover:border-zinc-800"
+                className="px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all text-zinc-800 hover:text-zinc-950 bg-white border border-zinc-200/90 hover:border-zinc-300 shadow-2xs active:scale-95"
               >
-                Log In
+                Sign In
               </button>
               <button
                 onClick={() => onOpenAuth('signup')}
-                className="px-4 py-1.5 rounded-xl text-xs font-bold transition-all transform active:scale-95 bg-white hover:bg-zinc-200 text-black shadow-md shadow-white/5 flex items-center gap-1.5"
+                className="hidden sm:flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all transform active:scale-95 bg-violet-600 hover:bg-violet-700 text-white shadow-sm shadow-violet-500/20"
               >
-                <span>Sign Up</span>
-                <span className="hidden sm:inline opacity-70 text-[10px] font-mono">(+2k Free)</span>
+                <span>Try for Free</span>
               </button>
             </div>
           )}
@@ -261,7 +253,7 @@ export default function Navbar({
           {/* Mobile Hamburger Button */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="md:hidden p-2 rounded-xl border transition-all border-zinc-800 bg-zinc-900 text-zinc-300"
+            className="md:hidden p-2 rounded-xl border transition-all border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
             aria-label="Open mobile menu"
           >
             {mobileMenuOpen ? (
@@ -279,7 +271,7 @@ export default function Navbar({
 
       {/* Mobile Drawer Navigation */}
       {mobileMenuOpen && (
-        <div className="md:hidden border-t mt-3 pt-3 pb-2 space-y-1 animate-fadeIn border-zinc-800/80 bg-[#09090b]">
+        <div className="md:hidden border-t mt-3 pt-3 pb-2 space-y-1 animate-fadeIn border-zinc-200 bg-white">
           {navLinks.map((link) => (
             <button
               key={link.id}
@@ -289,33 +281,23 @@ export default function Navbar({
               }}
               className={`w-full text-left px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-between ${
                 activePage === link.id
-                  ? 'bg-white text-black font-bold'
-                  : 'text-zinc-400 hover:bg-zinc-900'
+                  ? 'bg-zinc-900 text-white font-bold'
+                  : 'text-zinc-600 hover:bg-zinc-100'
               }`}
             >
               <span>{link.label}</span>
             </button>
           ))}
 
-          <button
-            onClick={() => {
-              setMobileMenuOpen(false);
-              onNavigate('home', '#voices');
-            }}
-            className="w-full text-left px-4 py-2.5 rounded-xl text-sm font-medium flex items-center justify-between text-zinc-400 hover:bg-zinc-900"
-          >
-            <span>Voices</span>
-          </button>
-
           {/* Mobile Auth actions if logged out */}
           {!user && (
-            <div className="pt-2 border-t border-zinc-800/60 grid grid-cols-2 gap-2 px-2">
+            <div className="pt-2 border-t border-zinc-200 grid grid-cols-2 gap-2 px-2">
               <button
                 onClick={() => {
                   setMobileMenuOpen(false);
                   onOpenAuth('login');
                 }}
-                className="py-2 rounded-xl text-xs font-bold border text-center border-zinc-800 text-zinc-200 hover:bg-zinc-900"
+                className="py-2 rounded-xl text-xs font-bold border text-center border-zinc-300 text-zinc-800 hover:bg-zinc-100"
               >
                 Log In
               </button>
@@ -324,7 +306,7 @@ export default function Navbar({
                   setMobileMenuOpen(false);
                   onOpenAuth('signup');
                 }}
-                className="py-2 rounded-xl text-xs font-bold bg-white text-black text-center shadow-sm hover:bg-zinc-200"
+                className="py-2 rounded-xl text-xs font-bold bg-violet-600 hover:bg-violet-700 text-white text-center shadow-sm shadow-violet-500/20"
               >
                 Sign Up Free
               </button>

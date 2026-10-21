@@ -29,6 +29,31 @@ const DEFAULT_PLANS = [
     isEnabled: true
   },
   {
+    id: 'Silver',
+    name: 'Silver',
+    priceMonthly: 1600,
+    priceAnnual: 1280,
+    pricePKR: 'PKR 1,600',
+    displayPrice: 'PKR 1,600',
+    credits: '250,000 credits',
+    creditCount: 250000,
+    badge: 'Most Popular',
+    desc: 'Great for active creators seeking dependable voice cloning and extended generation limits.',
+    features: [
+      'Community support 24/7',
+      'MP3 download format',
+      'Standard audio quality',
+      'Basic voice selection',
+      'Max 5,000 characters per conversion'
+    ],
+    buttonText: 'Subscribe to Silver',
+    highlight: true,
+    maxCharsPerGen: 5000,
+    customVoicesCount: 3,
+    maxQueuedTasks: 2,
+    isEnabled: true
+  },
+  {
     id: 'Lite',
     name: 'Lite',
     priceMonthly: 2800,
@@ -63,7 +88,7 @@ const DEFAULT_PLANS = [
     displayPrice: 'PKR 4,750',
     credits: '1,000,000 credits',
     creditCount: 1000000,
-    badge: 'Most Popular',
+    badge: 'Professional',
     desc: 'Built for pro content creators, video editors, podcasters, and growing channels.',
     features: [
       'Priority 36h Customer Support',
@@ -76,7 +101,7 @@ const DEFAULT_PLANS = [
       '1,000,000 total characters per month (approximately 20.4 hours of audio)'
     ],
     buttonText: 'Upgrade to Pro',
-    highlight: true,
+    highlight: false,
     maxCharsPerGen: 6000,
     customVoicesCount: 15,
     maxQueuedTasks: 3,

@@ -478,27 +478,9 @@ const synthesizeSpeech = ({ id, text, referenceVoicePath, language, targetAudioP
   return runDirectRunner({ id, text, referenceVoicePath, language, targetAudioPath, options });
 };
 
-// Helper functions for history management
-const readHistory = () => {
-  try {
-    if (!fs.existsSync(historyFile)) return [];
-    const data = fs.readFileSync(historyFile, 'utf8');
-    return JSON.parse(data || '[]');
-  } catch (err) {
-    console.error('Error reading history.json:', err);
-    return [];
-  }
-};
-
-const appendHistory = (entry) => {
-  try {
-    const list = readHistory();
-    list.unshift(entry); // Newest records at top
-    fs.writeFileSync(historyFile, JSON.stringify(list.slice(0, 500), null, 2), 'utf8');
-  } catch (err) {
-    console.error('Error writing to history.json:', err);
-  }
-};
+// History management: Server-side history is disabled; history is stored purely in client browser localStorage
+const readHistory = () => [];
+const appendHistory = () => {};
 
 // Configure Multer storage for voice sample uploads
 const storage = multer.diskStorage({
@@ -647,61 +629,30 @@ app.post('/api/upload-voice', authenticateToken, upload.single('voiceSample'), a
 
 /**
  * GET /api/history
- * Returns voice conversion records filtered strictly by deviceId
+ * Generation history is stored purely on the client side (browser localStorage).
+ * Returns empty history to ensure no server-side history persists or leaks across users.
  */
 app.get('/api/history', (req, res) => {
   const { deviceId } = req.query;
-  if (!deviceId) {
-    return res.json({ history: [], activeJobs: [] });
-  }
-  const allHistory = readHistory();
-  const deviceHistory = allHistory.filter(item => item.deviceId === deviceId);
-  const deviceActiveJobs = Array.from(activeJobs.values()).filter(item => item.deviceId === deviceId);
-  return res.json({ history: deviceHistory, activeJobs: deviceActiveJobs });
+  const deviceActiveJobs = deviceId
+    ? Array.from(activeJobs.values()).filter(item => item.deviceId === deviceId)
+    : [];
+  return res.json({ history: [], activeJobs: deviceActiveJobs });
 });
 
 /**
- * DELETE /api/history
- * Deletes records for a specific deviceId (all or single item) and safely cleans up audio files
+ * DELETE /api/history & POST /api/history/clear
+ * Deletes associated audio files on request and returns success
  */
-app.delete('/api/history', async (req, res) => {
+app.all(['/api/history', '/api/history/clear'], async (req, res) => {
   try {
-    const { deviceId, itemId } = req.query;
-    if (!deviceId) {
-      return res.status(400).json({ error: 'deviceId is required to delete history.' });
-    }
-
-    const allHistory = readHistory();
-    let toDelete = [];
-    let remaining = [];
-
+    const itemId = req.query.itemId || req.body?.itemId;
     if (itemId) {
-      toDelete = allHistory.filter(item => item.deviceId === deviceId && item.id === itemId);
-      remaining = allHistory.filter(item => !(item.deviceId === deviceId && item.id === itemId));
-    } else {
-      toDelete = allHistory.filter(item => item.deviceId === deviceId);
-      remaining = allHistory.filter(item => item.deviceId !== deviceId);
-    }
-
-    // Safely remove associated audio files from disk
-    toDelete.forEach(entry => {
-      if (entry.audioUrl) {
-        const filename = path.basename(entry.audioUrl);
-        const filePath = path.join(audioDir, filename);
-        if (fs.existsSync(filePath)) {
-          try {
-            fs.unlinkSync(filePath);
-          } catch (e) {
-            console.warn(`Could not delete audio file ${filename}:`, e.message);
-          }
-        }
+      const filename = `output_${itemId}.mp3`;
+      const filePath = path.join(audioDir, filename);
+      if (fs.existsSync(filePath)) {
+        try { fs.unlinkSync(filePath); } catch (e) {}
       }
-    });
-
-    fs.writeFileSync(historyFile, JSON.stringify(remaining, null, 2), 'utf8');
-
-    // Also delete matching records from PostgreSQL database
-    if (itemId) {
       try {
         await prisma.generation.deleteMany({ where: { id: itemId } });
       } catch (e) {}
@@ -709,12 +660,10 @@ app.delete('/api/history', async (req, res) => {
 
     return res.json({
       success: true,
-      deletedCount: toDelete.length,
-      remainingCount: remaining.filter(item => item.deviceId === deviceId).length
+      message: 'History cleared successfully.'
     });
   } catch (err) {
-    console.error('Error deleting device history:', err);
-    return res.status(500).json({ error: 'Failed to delete history.', details: err.message });
+    return res.json({ success: true });
   }
 });
 
@@ -879,6 +828,7 @@ app.post(['/api/clone-voice', '/api/generate'], ttsLimiter, optionalAuth, async 
 
     const historyEntry = {
       id: jobId,
+      userId: req.user ? req.user.id : null,
       deviceId: deviceId,
       timestamp: new Date().toISOString(),
       expiresAt: expiresAt.toISOString(),
@@ -888,7 +838,6 @@ app.post(['/api/clone-voice', '/api/generate'], ttsLimiter, optionalAuth, async 
       audioUrl: audioUrl
     };
 
-    appendHistory(historyEntry);
     activeJobs.delete(jobId);
 
     // Atomically deduct credits and record in PostgreSQL database if authenticated

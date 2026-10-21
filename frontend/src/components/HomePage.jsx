@@ -75,7 +75,7 @@ export default function HomePage({
   };
 
   return (
-    <div className="text-zinc-100 overflow-x-clip">
+    <div className="text-zinc-900 overflow-x-clip">
       {/* Hidden audio element for hero demos */}
       <audio
         ref={audioPlayerRef}
@@ -93,188 +93,353 @@ export default function HomePage({
       {/* ========================================================================= */}
       {/* 1. HERO SECTION                                                          */}
       {/* ========================================================================= */}
-      <section className="relative pt-14 pb-20 md:pt-24 md:pb-28 px-4 sm:px-6 lg:px-8 overflow-hidden">
-        {/* Subtle monochrome ambient glow */}
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] sm:w-[950px] h-[350px] bg-white/[0.03] rounded-full blur-[140px] pointer-events-none"></div>
+      <section className="relative pt-12 pb-20 md:pt-20 md:pb-28 px-4 sm:px-6 lg:px-8 overflow-hidden">
+        {/* Ambient background glows */}
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] sm:w-[1000px] h-[380px] bg-indigo-100/60 rounded-full blur-[140px] pointer-events-none"></div>
+        <div className="absolute top-1/3 left-1/4 w-[400px] h-[300px] bg-violet-100/50 rounded-full blur-[120px] pointer-events-none"></div>
 
         <div className="max-w-7xl mx-auto relative z-10">
           <div className="text-center max-w-4xl mx-auto">
-            {/* Announcement Pill */}
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold tracking-wide bg-zinc-900 text-zinc-300 border border-zinc-800 mb-6 shadow-sm">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span>ElevenLabs-Grade AI Voice Cloning & Neural TTS</span>
-            </div>
-
-            {/* Main Headline (Pure Black & White with Clean Contrast) */}
-            <h1 className="text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight leading-[1.1] text-white">
-              Create Lifelike AI Voices in Any Language, Any Tone.
+            {/* Main Headline matching Image 2 */}
+            <h1 className="text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight text-zinc-950 leading-[1.12]">
+              Transform Words into<br />
+              <span className="text-zinc-950">Studio-Grade Human Voices</span>
             </h1>
 
-            {/* Subtitle */}
-            <p className="mt-6 text-base sm:text-xl leading-relaxed max-w-3xl mx-auto font-normal text-zinc-400">
-              Transform your script into studio-quality speech with <strong className="text-zinc-200">120+ natural neural voices</strong> across <strong className="text-zinc-200">35+ regional accents</strong>. Clone custom voices from a 5-second sample with precision acoustic control over speed, pitch, and natural pauses.
+            {/* Subtitle matching Image 2 */}
+            <p className="mt-5 text-base sm:text-lg leading-relaxed max-w-2xl mx-auto font-normal text-zinc-600">
+              Create realistic voiceovers, clones, and dubbing with hyper-realistic AI that sounds completely human.
             </p>
 
-            {/* CTA Buttons Group (Black & White Monochromatic) */}
-            <div className="mt-9 flex flex-col sm:flex-row items-center justify-center gap-4">
+            {/* CTA Buttons Group matching Image 2 */}
+            <div className="mt-8 flex items-center justify-center gap-3.5">
               <button
                 type="button"
                 onClick={() => onNavigate('studio')}
-                className="w-full sm:w-auto px-8 py-4 rounded-2xl text-sm font-bold bg-white hover:bg-zinc-200 text-black shadow-lg shadow-white/5 transition-all transform hover:-translate-y-0.5 active:scale-95 flex items-center justify-center gap-2"
+                className="px-7 py-3.5 rounded-xl text-sm font-bold bg-[#1e1b4b] hover:bg-black text-white shadow-lg shadow-indigo-950/20 transition-all transform hover:-translate-y-0.5 active:scale-95 cursor-pointer"
               >
-                <span>Launch Voice Studio Free</span>
-                <span className="font-mono text-xs px-2 py-0.5 rounded bg-black/10 text-black font-extrabold">
-                  ⚡ 2k Credits
-                </span>
-                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                </svg>
+                Generate Now
               </button>
 
               <button
                 type="button"
-                onClick={() => onNavigate('pricing')}
-                className="w-full sm:w-auto px-7 py-4 rounded-2xl text-sm font-bold border border-zinc-700/80 bg-zinc-900 hover:bg-zinc-800 text-white shadow-sm transition-all"
+                onClick={() => onNavigate('voices')}
+                className="px-6 py-3.5 rounded-xl text-sm font-semibold border border-zinc-200/90 bg-white hover:bg-zinc-50 text-zinc-800 shadow-2xs transition-all active:scale-95 cursor-pointer"
               >
-                View Commercial Packages
+                Try for Free
               </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  const el = document.getElementById('voices');
-                  if (el) el.scrollIntoView({ behavior: 'smooth' });
-                }}
-                className="w-full sm:w-auto px-5 py-4 rounded-2xl text-sm font-medium text-zinc-400 hover:text-white transition-colors"
-              >
-                Browse 120+ Voices →
-              </button>
-            </div>
-
-            {/* Quick Micro-Metrics */}
-            <div className="mt-10 pt-8 border-t border-zinc-800/80 flex flex-wrap items-center justify-center gap-6 sm:gap-12 text-xs font-semibold text-zinc-400">
-              <div className="flex items-center gap-2">
-                <span className="text-emerald-400 font-bold">✓</span>
-                <span>No Credit Card Required</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-emerald-400 font-bold">✓</span>
-                <span>100% Commercial Broadcast Rights</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-emerald-400 font-bold">✓</span>
-                <span>Sub-second Neural Synthesis</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-emerald-400 font-bold">✓</span>
-                <span>Device-Isolated Voice Privacy</span>
-              </div>
             </div>
           </div>
 
           {/* ========================================================================= */}
-          {/* HERO LIVE VOICE AUDITION WIDGET                                           */}
+          {/* HERO OVERLAPPING SOUNDWAVE SHOWCASE DECK (Matching Image 2)              */}
           {/* ========================================================================= */}
-          <div id="voices" className="mt-14 max-w-4xl mx-auto scroll-mt-24">
-            <div className="rounded-3xl border border-zinc-800 bg-[#121215] p-5 sm:p-7 shadow-2xl backdrop-blur-xl">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 pb-4 border-b border-zinc-800/80">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <h3 className="text-sm sm:text-base font-bold tracking-tight text-white">
-                      Audition Studio Voices in Real-Time
-                    </h3>
-                  </div>
-                  <p className="text-xs text-zinc-400 mt-0.5">
-                    Click any model below to listen to its natural cadence, emotional depth, and studio audio fidelity.
-                  </p>
+          <div className="mt-14 max-w-2xl mx-auto relative px-4">
+            {/* Flanking Preview Card - Left (Peeking from behind) */}
+            <div className="hidden lg:flex items-center justify-between p-4 rounded-2xl bg-white border border-zinc-200/80 shadow-lg absolute -left-16 top-10 w-72 transform -rotate-3 opacity-70 pointer-events-none z-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-rose-500 to-violet-500 flex items-center justify-center text-white text-xs font-bold shadow-xs">
+                  SJ
                 </div>
+                <div>
+                  <h4 className="text-xs font-bold text-zinc-800 leading-tight">Sarah J.</h4>
+                  <p className="text-[10px] text-zinc-400">🇺🇸 English (US)</p>
+                </div>
+              </div>
+              <div className="w-24 h-6 flex items-center gap-1">
+                {[40, 70, 30, 90, 60, 40, 80, 50, 90, 35].map((h, i) => (
+                  <span key={i} style={{ height: `${h}%` }} className="w-1 bg-violet-400 rounded-full"></span>
+                ))}
+              </div>
+            </div>
+
+            {/* Flanking Preview Card - Right (Peeking from behind) */}
+            <div className="hidden lg:flex items-center justify-between p-4 rounded-2xl bg-white border border-zinc-200/80 shadow-lg absolute -right-16 top-10 w-72 transform rotate-3 opacity-70 pointer-events-none z-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-violet-500 flex items-center justify-center text-white text-xs font-bold shadow-xs">
+                  MR
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-zinc-800 leading-tight">Matar R.</h4>
+                  <p className="text-[10px] text-zinc-400">🇮🇹 English (US)</p>
+                </div>
+              </div>
+              <div className="w-24 h-6 flex items-center gap-1">
+                {[50, 35, 80, 45, 90, 65, 30, 85, 40, 75].map((h, i) => (
+                  <span key={i} style={{ height: `${h}%` }} className="w-1 bg-violet-400 rounded-full"></span>
+                ))}
+              </div>
+            </div>
+
+            {/* Center Elevated Master Card (Matching Image 2) */}
+            <div className="relative z-10 bg-white rounded-3xl border border-zinc-200/90 shadow-2xl p-6 sm:p-7 space-y-5">
+              {/* Top Speaker: Adam (Matches playing voice: Adam Deep Narration) */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-violet-600 via-indigo-600 to-blue-600 text-white font-extrabold text-sm flex items-center justify-center shrink-0 shadow-sm ring-2 ring-violet-500/20">
+                    AD
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <h4 className="text-sm font-bold text-zinc-900 leading-tight">Adam</h4>
+                      <span className="text-xs">🇺🇸</span>
+                      <span className="text-xs text-zinc-500 font-medium">English (US)</span>
+                    </div>
+                    <p className="text-[11px] text-zinc-400">Deep Narration • ElevenLabs Style</p>
+                  </div>
+                </div>
+
                 <button
-                  onClick={() => onNavigate('studio')}
-                  className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-white text-black hover:bg-zinc-200 transition-colors shadow-sm"
+                  type="button"
+                  onClick={() => {
+                    try {
+                      localStorage.setItem('sk_voiceclone_selected_voice', 'Adam (Deep Narration - ElevenLabs Style).wav');
+                    } catch (e) {}
+                    onNavigate('studio');
+                  }}
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-violet-50 hover:bg-violet-100 text-violet-700 border border-violet-100 transition-colors shadow-2xs cursor-pointer active:scale-95"
                 >
-                  Use In Studio →
+                  Use Voice →
                 </button>
               </div>
 
-              {/* Demo Voice Cards Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                {heroDemoVoices.map((item) => {
-                  const isSelected = activeDemoVoice === item.id;
-                  const isPlayingThis = isSelected && isPlayingDemo;
-
-                  return (
-                    <div
-                      key={item.id}
-                      onClick={() => handleToggleDemoPlay(item.id)}
-                      className={`p-4 rounded-2xl border cursor-pointer transition-all duration-200 relative ${
-                        isSelected
-                          ? 'bg-zinc-800/90 border-zinc-600 shadow-lg text-white'
-                          : 'bg-zinc-900/60 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/50 text-zinc-300'
+              {/* Central Fluid Soundwave Graphic with Center Play Button */}
+              <div className="relative h-20 sm:h-24 rounded-2xl bg-gradient-to-r from-violet-50 via-purple-50/80 to-indigo-50 flex items-center justify-center px-4 overflow-hidden border border-violet-100/80 group">
+                {/* Continuous Violet Smooth Soundwave Waves */}
+                <div className="absolute inset-0 flex items-center justify-center gap-1 px-4">
+                  {[25, 45, 60, 40, 80, 55, 95, 65, 100, 70, 85, 40, 60, 30, 85, 55, 95, 75, 50, 90, 65, 45, 80, 35, 70, 50, 85, 60, 40, 75, 50, 30].map((h, i) => (
+                    <span
+                      key={i}
+                      style={{
+                        height: isPlayingDemo ? `${h}%` : '20%',
+                        transition: 'height 0.2s ease'
+                      }}
+                      className={`w-1 sm:w-1.5 rounded-full ${
+                        isPlayingDemo
+                          ? 'bg-gradient-to-t from-violet-600 via-purple-500 to-indigo-500 animate-pulse'
+                          : 'bg-violet-300/80'
                       }`}
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2.5">
-                          <span className="w-7 h-7 rounded-lg bg-zinc-800 text-zinc-300 border border-zinc-700/80 font-bold text-xs flex items-center justify-center shrink-0">
-                            {item.flag}
-                          </span>
-                          <div>
-                            <h4 className="text-sm font-bold leading-tight text-white">{item.name}</h4>
-                            <span className="text-[11px] text-zinc-400">{item.accent}</span>
-                          </div>
-                        </div>
+                    ></span>
+                  ))}
+                </div>
 
-                        {/* Play / Pause Pill Button */}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleToggleDemoPlay(item.id);
-                          }}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-                            isPlayingThis
-                              ? 'bg-white text-black font-bold shadow-md'
-                              : 'bg-zinc-800/90 text-zinc-200 hover:bg-zinc-700 hover:text-white border border-zinc-700'
-                          }`}
-                        >
-                          {isPlayingThis ? (
-                            <>
-                              <span className="w-1.5 h-1.5 rounded-full bg-black animate-ping"></span>
-                              <span>Pause</span>
-                            </>
-                          ) : (
-                            <>
-                              <svg width="10" height="10" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M8 5v14l11-7z" />
-                              </svg>
-                              <span>Play Demo</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
+                {/* Center Circular Play / Pause Button */}
+                <button
+                  type="button"
+                  onClick={() => handleToggleDemoPlay(activeDemoVoice)}
+                  className="relative z-10 w-12 h-12 rounded-full bg-violet-600 hover:bg-violet-700 text-white flex items-center justify-center shadow-lg shadow-violet-500/35 transition-transform active:scale-95 cursor-pointer"
+                  title={isPlayingDemo ? 'Pause' : 'Play preview'}
+                >
+                  {isPlayingDemo ? (
+                    <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                      <rect x="6" y="4" width="4" height="16" rx="1.5" />
+                      <rect x="14" y="4" width="4" height="16" rx="1.5" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5 fill-current ml-0.5" viewBox="0 0 24 24">
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                  )}
+                </button>
+              </div>
 
-                      <p className="text-xs text-zinc-300 italic line-clamp-2 leading-relaxed">
-                        "{item.sampleText}"
-                      </p>
-
-                      {/* Animated Waveform bar when playing */}
-                      {isPlayingThis && (
-                        <div className="mt-3 flex items-center gap-1 h-3">
-                          {[40, 80, 50, 95, 30, 70, 100, 60, 85, 45, 90, 35].map((h, i) => (
-                            <span
-                              key={i}
-                              className="w-1 bg-white rounded-full animate-pulse"
-                              style={{
-                                height: `${h}%`,
-                                animationDelay: `${i * 70}ms`
-                              }}
-                            ></span>
-                          ))}
-                        </div>
-                      )}
+              {/* Bottom Speaker: Suian G. */}
+              <div className="flex items-center justify-between pt-2 border-t border-zinc-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-600 to-violet-600 text-white font-bold text-sm flex items-center justify-center shrink-0 shadow-sm ring-2 ring-violet-500/20">
+                    SG
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <h4 className="text-sm font-bold text-zinc-900 leading-tight">Suian G.</h4>
+                      <span className="text-xs">🇺🇸</span>
+                      <span className="text-xs text-zinc-500 font-medium">English (US)</span>
                     </div>
-                  );
-                })}
+                    <p className="text-[11px] text-zinc-400">Conversational Tech Specialist</p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => onNavigate('voices')}
+                  className="text-xs font-semibold text-violet-600 hover:text-violet-800 transition-colors flex items-center gap-1"
+                >
+                  <span>120+ voices catalog</span>
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Glowing Frosted Metrics Ribbon (Matching Image 2) */}
+            <div className="mt-8 text-center relative z-10">
+              <div className="inline-flex items-center flex-wrap justify-center gap-4 sm:gap-8 px-6 sm:px-8 py-3 rounded-full bg-white/95 border border-violet-100 shadow-xl shadow-violet-500/10 backdrop-blur-md text-xs sm:text-sm font-medium text-zinc-700">
+                <div>
+                  <strong className="text-zinc-900 font-extrabold">10M+</strong> characters generated
+                </div>
+                <div className="hidden sm:inline text-zinc-300">•</div>
+                <div>
+                  <strong className="text-zinc-900 font-extrabold">99.8%</strong> human parity
+                </div>
+                <div className="hidden sm:inline text-zinc-300">•</div>
+                <div>
+                  <strong className="text-zinc-900 font-extrabold">50K+</strong> developers & creators
+                </div>
+              </div>
+            </div>
+
+            {/* 3 Step Workflow Cards (Matching Image 2 Bottom Layout) */}
+            <div className="mt-12 sm:mt-16 grid grid-cols-1 md:grid-cols-3 gap-6 relative z-10 text-left items-stretch">
+              {/* Step 1: Input Text & Select Voice */}
+              <div className="p-6 sm:p-7 rounded-3xl bg-white border border-zinc-200/90 shadow-md hover:shadow-lg transition-all flex flex-col justify-between h-full group">
+                <div>
+                  <div className="flex items-center gap-3 mb-5">
+                    <span className="w-8 h-8 rounded-xl bg-violet-100 text-violet-700 font-extrabold text-xs flex items-center justify-center shrink-0 shadow-2xs">
+                      1
+                    </span>
+                    <h3 className="text-base font-bold text-zinc-900 tracking-tight leading-snug">
+                      Input Text & Select Voice
+                    </h3>
+                  </div>
+                  
+                  {/* Visual Mockup inside Card 1 */}
+                  <div className="p-4 rounded-2xl bg-slate-50/90 border border-zinc-200/80 flex flex-col justify-between gap-3 min-h-[195px]">
+                    <div className="flex items-center justify-between text-[11px] text-zinc-500 font-medium">
+                      <span className="flex items-center gap-1.5 font-semibold text-zinc-700">
+                        <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        <span>Script Editor</span>
+                      </span>
+                      <span className="px-2 py-0.5 rounded-md bg-violet-100 text-violet-700 text-[10px] font-mono font-bold">
+                        &lt;prompt&gt;
+                      </span>
+                    </div>
+
+                    <div className="text-xs text-zinc-700 font-mono bg-white p-3 rounded-xl border border-zinc-200/80 leading-relaxed shadow-2xs line-clamp-2">
+                      "Transform words into studio-grade human voices with hyper-realistic AI..."
+                    </div>
+
+                    <div className="flex items-center justify-between text-[11px] text-zinc-500 pt-1.5 border-t border-zinc-200/60">
+                      <span className="font-medium text-zinc-700 flex items-center gap-1">
+                        <span>🇺🇸</span> Sarah (US)
+                      </span>
+                      <span className="font-mono font-semibold text-zinc-600">68 chars</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 2: Generate & Refine */}
+              <div className="p-6 sm:p-7 rounded-3xl bg-white border border-zinc-200/90 shadow-md hover:shadow-lg transition-all flex flex-col justify-between h-full group">
+                <div>
+                  <div className="flex items-center gap-3 mb-5">
+                    <span className="w-8 h-8 rounded-xl bg-violet-100 text-violet-700 font-extrabold text-xs flex items-center justify-center shrink-0 shadow-2xs">
+                      2
+                    </span>
+                    <h3 className="text-base font-bold text-zinc-900 tracking-tight leading-snug">
+                      Generate & Refine
+                    </h3>
+                  </div>
+
+                  {/* Visual Mockup inside Card 2 */}
+                  <div className="p-4 rounded-2xl bg-slate-50/90 border border-zinc-200/80 flex flex-col justify-between gap-3 min-h-[195px]">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        {/* Radial Progress Gauge */}
+                        <div className="relative w-10 h-10 flex items-center justify-center shrink-0">
+                          <svg className="w-10 h-10 transform -rotate-90" viewBox="0 0 36 36">
+                            <path className="text-zinc-200" strokeWidth="3.5" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                            <path className="text-violet-600" strokeDasharray="92, 100" strokeLinecap="round" strokeWidth="3.5" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                          </svg>
+                          <span className="absolute text-[10px] font-bold font-mono text-zinc-800">92%</span>
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-zinc-900">Neural Synthesis</p>
+                          <p className="text-[10px] text-zinc-500 font-medium">XTTS-v2 Engine</p>
+                        </div>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">
+                        Processing
+                      </span>
+                    </div>
+
+                    {/* Sliders */}
+                    <div className="space-y-1.5 bg-white p-2.5 rounded-xl border border-zinc-200/80 shadow-2xs">
+                      <div className="flex items-center justify-between text-[11px] text-zinc-600">
+                        <span>Pacing / Speed</span>
+                        <span className="font-mono font-bold text-zinc-900">1.05x</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-zinc-200 rounded-full relative">
+                        <div className="w-[60%] h-full bg-violet-600 rounded-full"></div>
+                        <div className="absolute top-1/2 left-[60%] -translate-x-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-violet-600 border-2 border-white shadow-xs"></div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[11px] text-zinc-500 pt-1.5 border-t border-zinc-200/60">
+                      <span>Pitch: Natural</span>
+                      <span className="font-semibold text-violet-700">Studio Warm</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 3: Download & Integrate */}
+              <div className="p-6 sm:p-7 rounded-3xl bg-white border border-zinc-200/90 shadow-md hover:shadow-lg transition-all flex flex-col justify-between h-full group">
+                <div>
+                  <div className="flex items-center gap-3 mb-5">
+                    <span className="w-8 h-8 rounded-xl bg-violet-100 text-violet-700 font-extrabold text-xs flex items-center justify-center shrink-0 shadow-2xs">
+                      3
+                    </span>
+                    <h3 className="text-base font-bold text-zinc-900 tracking-tight leading-snug">
+                      Download & Integrate
+                    </h3>
+                  </div>
+
+                  {/* Visual Mockup inside Card 3 */}
+                  <div className="p-4 rounded-2xl bg-slate-50/90 border border-zinc-200/80 flex flex-col justify-between gap-3 min-h-[195px]">
+                    {/* Top file row */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-8 h-8 rounded-xl bg-violet-100 text-violet-600 flex items-center justify-center shrink-0 shadow-2xs">
+                          <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 00-9.78 2.096A4.001 4.001 0 003 15z" />
+                          </svg>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-zinc-900 truncate">podcast_intro.mp3</p>
+                          <p className="text-[10px] text-zinc-500 truncate">320kbps • 44.1kHz</p>
+                        </div>
+                      </div>
+                      <span className="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        Ready
+                      </span>
+                    </div>
+
+                    {/* Waveform & Duration */}
+                    <div className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-zinc-200/80 shadow-2xs">
+                      <div className="flex items-center gap-1">
+                        {[35, 75, 50, 90, 60, 40, 80, 55, 95, 45, 70, 30].map((h, i) => (
+                          <span key={i} style={{ height: `${h * 0.18}px` }} className="w-1 bg-violet-400 rounded-full"></span>
+                        ))}
+                      </div>
+                      <span className="text-[11px] font-mono text-zinc-400">0:45</span>
+                    </div>
+
+                    {/* Button Row - Cleanly positioned, no overlap! */}
+                    <button
+                      type="button"
+                      onClick={() => onNavigate('studio')}
+                      className="w-full py-2 px-3 rounded-xl text-xs font-bold bg-violet-600 hover:bg-violet-700 text-white shadow-sm shadow-violet-500/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                    >
+                      <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                      <span>Export MP3</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -284,31 +449,39 @@ export default function HomePage({
       {/* ========================================================================= */}
       {/* 2. STATS & CAPABILITIES BAR                                               */}
       {/* ========================================================================= */}
-      <section className="py-12 border-y bg-[#0c0a12] border-zinc-800/80">
+      <section className="py-12 border-y bg-white/70 backdrop-blur-md border-zinc-200/80">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
-            <div>
-              <p className="text-3xl sm:text-5xl font-black text-white">120+</p>
-              <p className="text-xs sm:text-sm font-semibold text-zinc-400 mt-1">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+            <div className="p-4 rounded-2xl bg-zinc-50/70 border border-zinc-200/70 shadow-xs">
+              <p className="text-3xl sm:text-5xl font-extrabold bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">
+                10M+
+              </p>
+              <p className="text-xs sm:text-sm font-semibold text-zinc-600 mt-1.5">
+                Characters Generated
+              </p>
+            </div>
+            <div className="p-4 rounded-2xl bg-zinc-50/70 border border-zinc-200/70 shadow-xs">
+              <p className="text-3xl sm:text-5xl font-extrabold text-zinc-900">
+                99.8%
+              </p>
+              <p className="text-xs sm:text-sm font-semibold text-zinc-600 mt-1.5">
+                Human Parity Score
+              </p>
+            </div>
+            <div className="p-4 rounded-2xl bg-zinc-50/70 border border-zinc-200/70 shadow-xs">
+              <p className="text-3xl sm:text-5xl font-extrabold text-indigo-600">
+                50K+
+              </p>
+              <p className="text-xs sm:text-sm font-semibold text-zinc-600 mt-1.5">
+                Active Creators & Teams
+              </p>
+            </div>
+            <div className="p-4 rounded-2xl bg-zinc-50/70 border border-zinc-200/70 shadow-xs">
+              <p className="text-3xl sm:text-5xl font-extrabold text-zinc-900">
+                120+
+              </p>
+              <p className="text-xs sm:text-sm font-semibold text-zinc-600 mt-1.5">
                 Studio Neural Voices
-              </p>
-            </div>
-            <div>
-              <p className="text-3xl sm:text-5xl font-black text-white">35+</p>
-              <p className="text-xs sm:text-sm font-semibold text-zinc-400 mt-1">
-                Regional Accents & Dialects
-              </p>
-            </div>
-            <div>
-              <p className="text-3xl sm:text-5xl font-black text-emerald-400">2,000</p>
-              <p className="text-xs sm:text-sm font-semibold text-zinc-400 mt-1">
-                Free Starter Credits
-              </p>
-            </div>
-            <div>
-              <p className="text-3xl sm:text-5xl font-black text-white">&lt; 1.2s</p>
-              <p className="text-xs sm:text-sm font-semibold text-zinc-400 mt-1">
-                Fast Generation Latency
               </p>
             </div>
           </div>
@@ -320,80 +493,80 @@ export default function HomePage({
       {/* ========================================================================= */}
       <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
         <div className="text-center max-w-3xl mx-auto mb-16">
-          <span className="text-xs font-bold uppercase tracking-wider text-zinc-300 px-3 py-1 rounded-full bg-zinc-900 border border-zinc-800">
-            Why SK - VoiceClone Studio?
+          <span className="text-xs font-bold uppercase tracking-wider text-indigo-700 px-3.5 py-1 rounded-full bg-indigo-50 border border-indigo-200/80 shadow-xs">
+            Why SK VoiceClone Studio?
           </span>
-          <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight mt-3 text-white">
+          <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight mt-4 text-zinc-900">
             Built for Commercial Speed & Audio Perfection
           </h2>
-          <p className="mt-3 text-sm sm:text-base leading-relaxed text-zinc-400">
+          <p className="mt-3 text-sm sm:text-base leading-relaxed text-zinc-600">
             Everything you need to clone voices, orchestrate multi-character audiobooks, and export broadcast-grade narration without expensive voice actors or studio rental.
           </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {/* Feature 1 */}
-          <div className="p-7 rounded-3xl border border-zinc-800/80 bg-[#121215] transition-all hover:border-zinc-700">
-            <div className="w-12 h-12 rounded-2xl bg-zinc-900 text-white border border-zinc-800 flex items-center justify-center text-xl mb-5">
+          <div className="p-7 rounded-3xl border border-zinc-200/90 bg-white shadow-xs hover:shadow-md hover:border-indigo-200 transition-all group">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 border border-indigo-100 flex items-center justify-center text-xl mb-5 shadow-xs group-hover:scale-105 transition-transform">
               🎙️
             </div>
-            <h3 className="text-lg font-bold tracking-tight mb-2 text-white">Zero-Shot Voice Cloning</h3>
-            <p className="text-xs text-zinc-400 leading-relaxed">
+            <h3 className="text-lg font-bold tracking-tight mb-2 text-zinc-900">Zero-Shot Voice Cloning</h3>
+            <p className="text-xs text-zinc-600 leading-relaxed">
               Upload any clean 5-second audio sample (.wav) and replicate vocal timbre, cadence, and texture instantly. Keep your cloned voices saved to your private device registry for permanent reuse.
             </p>
           </div>
 
           {/* Feature 2 */}
-          <div className="p-7 rounded-3xl border border-zinc-800/80 bg-[#121215] transition-all hover:border-zinc-700">
-            <div className="w-12 h-12 rounded-2xl bg-zinc-900 text-white border border-zinc-800 flex items-center justify-center text-xl mb-5">
+          <div className="p-7 rounded-3xl border border-zinc-200/90 bg-white shadow-xs hover:shadow-md hover:border-indigo-200 transition-all group">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 border border-indigo-100 flex items-center justify-center text-xl mb-5 shadow-xs group-hover:scale-105 transition-transform">
               🌍
             </div>
-            <h3 className="text-lg font-bold tracking-tight mb-2 text-white">Multilingual & Native Accents</h3>
-            <p className="text-xs text-zinc-400 leading-relaxed">
+            <h3 className="text-lg font-bold tracking-tight mb-2 text-zinc-900">Multilingual & Native Accents</h3>
+            <p className="text-xs text-zinc-600 leading-relaxed">
               Native-sounding pronunciation for English (US, UK, Australia, Ireland, Canada, India), Urdu, Hindi, Arabic, Spanish, French, German, Italian, Portuguese, Japanese, Korean, and Cantonese.
             </p>
           </div>
 
           {/* Feature 3 */}
-          <div className="p-7 rounded-3xl border border-zinc-800/80 bg-[#121215] transition-all hover:border-zinc-700">
-            <div className="w-12 h-12 rounded-2xl bg-zinc-900 text-white border border-zinc-800 flex items-center justify-center text-xl mb-5">
+          <div className="p-7 rounded-3xl border border-zinc-200/90 bg-white shadow-xs hover:shadow-md hover:border-indigo-200 transition-all group">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 border border-indigo-100 flex items-center justify-center text-xl mb-5 shadow-xs group-hover:scale-105 transition-transform">
               🎛️
             </div>
-            <h3 className="text-lg font-bold tracking-tight mb-2 text-white">Acoustic Modulation Suite</h3>
-            <p className="text-xs text-zinc-400 leading-relaxed">
+            <h3 className="text-lg font-bold tracking-tight mb-2 text-zinc-900">Acoustic Modulation Suite</h3>
+            <p className="text-xs text-zinc-600 leading-relaxed">
               Fine-tune vocal pacing (-50% to +50%), shift pitch for dramatic resonance, and inject natural micro-pauses between sentences for emotional nuance and theatrical suspense.
             </p>
           </div>
 
           {/* Feature 4 */}
-          <div className="p-7 rounded-3xl border border-zinc-800/80 bg-[#121215] transition-all hover:border-zinc-700">
-            <div className="w-12 h-12 rounded-2xl bg-zinc-900 text-white border border-zinc-800 flex items-center justify-center text-xl mb-5">
+          <div className="p-7 rounded-3xl border border-zinc-200/90 bg-white shadow-xs hover:shadow-md hover:border-indigo-200 transition-all group">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 border border-indigo-100 flex items-center justify-center text-xl mb-5 shadow-xs group-hover:scale-105 transition-transform">
               ⚡
             </div>
-            <h3 className="text-lg font-bold tracking-tight mb-2 text-white">Background Task Queues</h3>
-            <p className="text-xs text-zinc-400 leading-relaxed">
+            <h3 className="text-lg font-bold tracking-tight mb-2 text-zinc-900">Background Task Queues</h3>
+            <p className="text-xs text-zinc-600 leading-relaxed">
               Synthesize lengthy articles, chapters, and long-form scripts without browser freezing. Active generation jobs run smoothly in the background while you continue working.
             </p>
           </div>
 
           {/* Feature 5 */}
-          <div className="p-7 rounded-3xl border border-zinc-800/80 bg-[#121215] transition-all hover:border-zinc-700">
-            <div className="w-12 h-12 rounded-2xl bg-zinc-900 text-white border border-zinc-800 flex items-center justify-center text-xl mb-5">
+          <div className="p-7 rounded-3xl border border-zinc-200/90 bg-white shadow-xs hover:shadow-md hover:border-indigo-200 transition-all group">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 border border-indigo-100 flex items-center justify-center text-xl mb-5 shadow-xs group-hover:scale-105 transition-transform">
               💾
             </div>
-            <h3 className="text-lg font-bold tracking-tight mb-2 text-white">Persistent Device History</h3>
-            <p className="text-xs text-zinc-400 leading-relaxed">
-              Every generation is saved directly to your isolated device timeline with instant audio playback, script re-copy, and one-click MP3 download without losing previous work.
+            <h3 className="text-lg font-bold tracking-tight mb-2 text-zinc-900">Isolated Client History</h3>
+            <p className="text-xs text-zinc-600 leading-relaxed">
+              Every generation is saved strictly to your personal browser local storage with instant audio playback, script re-copy, and one-click MP3 download without storing personal scripts on server disks.
             </p>
           </div>
 
           {/* Feature 6 */}
-          <div className="p-7 rounded-3xl border border-zinc-800/80 bg-[#121215] transition-all hover:border-zinc-700">
-            <div className="w-12 h-12 rounded-2xl bg-zinc-900 text-white border border-zinc-800 flex items-center justify-center text-xl mb-5">
+          <div className="p-7 rounded-3xl border border-zinc-200/90 bg-white shadow-xs hover:shadow-md hover:border-indigo-200 transition-all group">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 border border-indigo-100 flex items-center justify-center text-xl mb-5 shadow-xs group-hover:scale-105 transition-transform">
               💼
             </div>
-            <h3 className="text-lg font-bold tracking-tight mb-2 text-white">Commercial Broadcast Rights</h3>
-            <p className="text-xs text-zinc-400 leading-relaxed">
+            <h3 className="text-lg font-bold tracking-tight mb-2 text-zinc-900">Commercial Broadcast Rights</h3>
+            <p className="text-xs text-zinc-600 leading-relaxed">
               Every clip you create is 100% royalty-free for commercial use across YouTube monetization, Spotify podcasts, indie video games, TV commercials, and paid client work.
             </p>
           </div>
@@ -403,41 +576,47 @@ export default function HomePage({
       {/* ========================================================================= */}
       {/* 4. HOW IT WORKS (3 SIMPLE STEPS)                                         */}
       {/* ========================================================================= */}
-      <section className="py-20 border-y bg-[#0c0a12] border-zinc-800/80">
+      <section className="py-20 border-y bg-zinc-50/80 border-zinc-200/80">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-2xl mx-auto mb-16">
-            <span className="text-xs font-bold uppercase tracking-wider text-zinc-300 px-3 py-1 rounded-full bg-zinc-900 border border-zinc-800">
+            <span className="text-xs font-bold uppercase tracking-wider text-indigo-700 px-3.5 py-1 rounded-full bg-indigo-50 border border-indigo-200/80 shadow-xs">
               Workflow Simplicity
             </span>
-            <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight mt-3 text-white">
+            <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight mt-4 text-zinc-900">
               Three Steps From Script to Master Audio
             </h2>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative">
             {/* Step 1 */}
-            <div className="p-8 rounded-3xl border border-zinc-800 bg-[#121215]">
-              <div className="text-4xl font-black text-zinc-600 mb-4">01</div>
-              <h3 className="text-lg font-bold mb-2 text-white">Select or Clone Voice</h3>
-              <p className="text-xs text-zinc-400 leading-relaxed">
+            <div className="p-8 rounded-3xl border border-zinc-200/90 bg-white shadow-xs hover:shadow-md transition-all">
+              <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 font-mono font-black text-lg flex items-center justify-center mb-5 border border-indigo-100">
+                01
+              </div>
+              <h3 className="text-lg font-bold mb-2 text-zinc-900">Input Script & Select Voice</h3>
+              <p className="text-xs text-zinc-600 leading-relaxed">
                 Choose from 120+ pre-trained studio human models or upload your own 5-second voice sample to clone a unique custom speaker.
               </p>
             </div>
 
             {/* Step 2 */}
-            <div className="p-8 rounded-3xl border border-zinc-800 bg-[#121215]">
-              <div className="text-4xl font-black text-zinc-600 mb-4">02</div>
-              <h3 className="text-lg font-bold mb-2 text-white">Input Script & Tone</h3>
-              <p className="text-xs text-zinc-400 leading-relaxed">
-                Type or paste your text. Use the acoustic modulation sliders to adjust speaking rate, pitch modulation, and natural sentence pauses.
+            <div className="p-8 rounded-3xl border border-zinc-200/90 bg-white shadow-xs hover:shadow-md transition-all">
+              <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 font-mono font-black text-lg flex items-center justify-center mb-5 border border-indigo-100">
+                02
+              </div>
+              <h3 className="text-lg font-bold mb-2 text-zinc-900">Fine-Tune Acoustics & Pitch</h3>
+              <p className="text-xs text-zinc-600 leading-relaxed">
+                Adjust speaking rate, pitch modulation, and natural sentence pauses with immediate live preview before final synthesis.
               </p>
             </div>
 
             {/* Step 3 */}
-            <div className="p-8 rounded-3xl border border-zinc-800 bg-[#121215]">
-              <div className="text-4xl font-black text-zinc-600 mb-4">03</div>
-              <h3 className="text-lg font-bold mb-2 text-white">Generate & Download</h3>
-              <p className="text-xs text-zinc-400 leading-relaxed">
+            <div className="p-8 rounded-3xl border border-zinc-200/90 bg-white shadow-xs hover:shadow-md transition-all">
+              <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 font-mono font-black text-lg flex items-center justify-center mb-5 border border-indigo-100">
+                03
+              </div>
+              <h3 className="text-lg font-bold mb-2 text-zinc-900">Instant Studio Audio & MP3</h3>
+              <p className="text-xs text-zinc-600 leading-relaxed">
                 Hit synthesize. The neural engine compiles your audio in seconds, ready to preview in high fidelity and download in MP3 format.
               </p>
             </div>
@@ -449,29 +628,30 @@ export default function HomePage({
       {/* 5. COMMERCIAL PACKAGES QUICK TEASER                                      */}
       {/* ========================================================================= */}
       <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
-        <div className="p-8 sm:p-12 rounded-3xl border border-zinc-800 bg-[#121215] text-center relative overflow-hidden">
+        <div className="p-8 sm:p-12 rounded-3xl border border-zinc-200/90 bg-white text-center relative overflow-hidden shadow-xl shadow-zinc-900/5">
+          <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-50/60 rounded-full blur-3xl pointer-events-none"></div>
           <div className="max-w-2xl mx-auto relative z-10">
-            <span className="text-xs font-bold uppercase tracking-wider text-zinc-300 px-3 py-1 rounded-full bg-zinc-900 border border-zinc-800">
+            <span className="text-xs font-bold uppercase tracking-wider text-indigo-700 px-3.5 py-1 rounded-full bg-indigo-50 border border-indigo-200/80">
               Commercial Pricing
             </span>
-            <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight mt-4 text-white">
-              Plans Starting From <span className="text-emerald-400">FREE</span>
+            <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight mt-4 text-zinc-900">
+              Plans Starting From <span className="text-indigo-600">FREE</span>
             </h2>
-            <p className="text-xs sm:text-sm text-zinc-400 mt-3 leading-relaxed">
-              Explore our 4 transparent tiers: <strong className="text-white">Free (2k credits)</strong>, <strong className="text-white">Lite (PKR 2,800/mo)</strong>, <strong className="text-white">Pro (PKR 4,750/mo)</strong>, and <strong className="text-white">Studio (PKR 6,700/mo)</strong> with up to 3,000,000 characters and 30 cloned voices.
+            <p className="text-xs sm:text-sm text-zinc-600 mt-3 leading-relaxed">
+              Explore our flexible commercial tiers: <strong className="text-zinc-900">Free (2k credits)</strong>, <strong className="text-indigo-600 font-extrabold">Silver (PKR 1,600/mo)</strong>, <strong className="text-zinc-900">Lite (PKR 2,800/mo)</strong>, <strong className="text-zinc-900">Pro (PKR 4,750/mo)</strong>, and <strong className="text-zinc-900">Studio (PKR 6,700/mo)</strong> with up to 3,000,000 characters and 30 cloned voices.
             </p>
             <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
               <button
                 type="button"
                 onClick={() => onNavigate('pricing')}
-                className="px-8 py-3.5 rounded-xl text-xs font-bold bg-white text-black hover:bg-zinc-200 transition-all shadow-md active:scale-95"
+                className="px-8 py-3.5 rounded-xl text-xs font-bold bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white transition-all shadow-md shadow-indigo-500/25 active:scale-95"
               >
-                Compare All 4 Packages →
+                Compare All Packages →
               </button>
               <button
                 type="button"
                 onClick={() => onNavigate('studio')}
-                className="px-6 py-3.5 rounded-xl text-xs font-bold bg-zinc-900 hover:bg-zinc-800 text-white border border-zinc-700 transition-all"
+                className="px-6 py-3.5 rounded-xl text-xs font-bold bg-white hover:bg-zinc-50 text-zinc-800 border border-zinc-300 transition-all shadow-xs"
               >
                 Try Free In Studio
               </button>
@@ -484,16 +664,16 @@ export default function HomePage({
       {/* 6. CALL TO ACTION BANNER                                                 */}
       {/* ========================================================================= */}
       <section className="pb-24 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto text-center">
-        <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white">
+        <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-zinc-900">
           Ready to Bring Your Words to Life?
         </h2>
-        <p className="mt-3 text-sm max-w-xl mx-auto text-zinc-400">
-          Join thousands of content creators, educators, and businesses using SK - VoiceClone Studio for studio-grade audio synthesis.
+        <p className="mt-3 text-sm max-w-xl mx-auto text-zinc-600">
+          Join thousands of content creators, educators, and businesses using SK VoiceClone Studio for studio-grade audio synthesis.
         </p>
         <div className="mt-7 flex items-center justify-center gap-4">
           <button
             onClick={() => onNavigate('studio')}
-            className="px-8 py-3.5 rounded-xl text-xs font-bold bg-white hover:bg-zinc-200 text-black shadow-lg shadow-white/5 transition-all active:scale-95"
+            className="px-8 py-3.5 rounded-xl text-xs font-bold bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white shadow-lg shadow-indigo-500/25 transition-all active:scale-95"
           >
             Start Creating (2,000 Free Credits)
           </button>

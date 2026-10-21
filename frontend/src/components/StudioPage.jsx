@@ -46,21 +46,61 @@ export default function StudioPage({
   const [showUploadModal, setShowUploadModal] = useState(false);
   const fileInputRef = useRef(null);
 
-  // History States
-  const LOCAL_STORAGE_KEY = 'sk_voiceclone_studio_history';
-  const [history, setHistory] = useState(() => {
+  // User-scoped Local Storage History Management (Strictly Browser-Side Only)
+  const getUserStorageKey = (u) => {
+    if (u?.id) return `sk_history_user_${u.id}`;
+    if (u?.email) return `sk_history_user_${String(u.email).toLowerCase().replace(/[^a-z0-9_]/g, '_')}`;
+    return 'sk_history_guest';
+  };
+
+  const loadUserHistory = (u) => {
     try {
-      const saved = localStorage.getItem('sk_voiceclone_studio_history');
-      return saved ? JSON.parse(saved) : [];
+      // Clear legacy shared global history key so previous server records never appear
+      localStorage.removeItem('sk_voiceclone_studio_history');
+
+      const key = getUserStorageKey(u);
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          const currentUserId = u?.id || null;
+          return parsed.filter((item) => {
+            if (currentUserId) {
+              return item.userId === currentUserId;
+            }
+            return !item.userId;
+          });
+        }
+      }
     } catch (e) {
-      return [];
+      console.warn('Failed to read local history:', e);
     }
-  });
+    return [];
+  };
+
+  const saveUserHistory = (u, items) => {
+    try {
+      const key = getUserStorageKey(u);
+      localStorage.setItem(key, JSON.stringify(items.slice(0, 50)));
+    } catch (e) {
+      console.warn('Failed to save local history:', e);
+    }
+  };
+
+  const [history, setHistory] = useState(() => loadUserHistory(user));
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [searchHistory, setSearchHistory] = useState('');
   const [playingHistoryId, setPlayingHistoryId] = useState(null);
   const [downloadingId, setDownloadingId] = useState(null);
   const audioPlayerRef = useRef(null);
+
+  // Switch history immediately when active user logs in, logs out, or switches accounts
+  useEffect(() => {
+    setLoadingHistory(true);
+    setHistory(loadUserHistory(user));
+    setPlayingHistoryId(null);
+    setTimeout(() => setLoadingHistory(false), 50);
+  }, [user?.id, user?.email]);
 
   // Preload script if user clicked "Re-Synthesize" from their Dashboard
   useEffect(() => {
@@ -185,15 +225,15 @@ export default function StudioPage({
     return fallbackLimits[currentPlan.toLowerCase()] || 2500;
   }, [matchedPlan, plans, currentPlan]);
 
-  // Theme tokens - Monochromatic Luxury (Black & White)
+  // Theme tokens - Clean Light Theme
   const theme = customTheme || {
-    cardBg: 'bg-[#121215] border-zinc-800/80 shadow-2xl',
-    panelBg: 'bg-[#18181b]/80 border-zinc-800',
-    inputBg: 'bg-[#18181b] border-zinc-800 text-zinc-100 placeholder-zinc-500 focus:border-zinc-500 focus:ring-zinc-600',
-    sidebarBg: 'bg-[#121215] border-zinc-800/80 shadow-2xl',
-    textMuted: 'text-zinc-400',
-    btnPrimary: 'bg-white hover:bg-zinc-200 text-black shadow-md shadow-white/5 active:scale-[0.99] font-bold',
-    btnSecondary: 'bg-zinc-900 hover:bg-zinc-800 text-zinc-100 border border-zinc-700/80 shadow-sm active:scale-[0.99]'
+    cardBg: 'bg-white border-zinc-200/90 shadow-sm',
+    panelBg: 'bg-zinc-50 border-zinc-200',
+    inputBg: 'bg-white border-zinc-300 text-zinc-900 placeholder-zinc-400 focus:border-zinc-900 focus:ring-zinc-900',
+    sidebarBg: 'bg-white border-zinc-200/90 shadow-sm',
+    textMuted: 'text-zinc-500',
+    btnPrimary: 'bg-zinc-900 hover:bg-zinc-800 text-white shadow-sm active:scale-[0.99] font-bold',
+    btnSecondary: 'bg-white hover:bg-zinc-50 text-zinc-800 border border-zinc-300 shadow-sm active:scale-[0.99]'
   };
 
   // Fetch available voices & metadata registry from server
@@ -216,48 +256,8 @@ export default function StudioPage({
     }
   };
 
-  // Fetch generation history for this device
-  const fetchHistory = async () => {
-    setLoadingHistory(true);
-    const devId = getDeviceId();
-    try {
-      const res = await axios.get(`${API_BASE}/api/history`, {
-        params: { deviceId: devId }
-      });
-      const serverHistory = res.data.history || [];
-      const activeJobs = res.data.activeJobs || [];
-
-      setHistory((prevHistory) => {
-        const localGenerating = prevHistory.filter((item) => item.status === 'generating');
-        const combined = [...localGenerating, ...activeJobs, ...serverHistory];
-        const unique = [];
-        const seen = new Set();
-        for (const item of combined) {
-          if (!seen.has(item.id)) {
-            seen.add(item.id);
-            unique.push(item);
-          }
-        }
-        return unique.slice(0, 50);
-      });
-
-      try {
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(serverHistory));
-      } catch (e) {}
-    } catch (err) {
-      console.warn('Unable to load history from server, using local cache:', err.message);
-      try {
-        const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-        if (saved) setHistory(JSON.parse(saved));
-      } catch (e) {}
-    } finally {
-      setTimeout(() => setLoadingHistory(false), 150);
-    }
-  };
-
   useEffect(() => {
     fetchVoices();
-    fetchHistory();
   }, []);
 
   // Synchronize playback when history item is selected and audioUrl mounts
@@ -348,6 +348,8 @@ export default function StudioPage({
     // Optimistically insert a generating card
     const pendingRecord = {
       id: tempJobId,
+      userId: user?.id || null,
+      userEmail: user?.email || null,
       deviceId: devId,
       timestamp: new Date().toISOString(),
       text: text.trim().length > 120 ? text.trim().substring(0, 120) + '...' : text.trim(),
@@ -356,23 +358,6 @@ export default function StudioPage({
     };
 
     setHistory((prev) => [pendingRecord, ...prev.filter((item) => item.id !== tempJobId)]);
-
-    let pollTimer = setInterval(async () => {
-      try {
-        const pollRes = await axios.get(`${API_BASE}/api/history`, {
-          params: { deviceId: devId }
-        });
-        const serverList = pollRes.data.history || [];
-        const match = serverList.find(
-          (it) => it.id === tempJobId || (it.text === pendingRecord.text && Math.abs(new Date(it.timestamp) - new Date(pendingRecord.timestamp)) < 25000)
-        );
-
-        if (match && match.audioUrl) {
-          clearInterval(pollTimer);
-          setHistory((prev) => [match, ...prev.filter((i) => i.id !== tempJobId && i.id !== match.id)]);
-        }
-      } catch (e) {}
-    }, 2500);
 
     try {
       const token = localStorage.getItem('sk_voiceclone_auth_token');
@@ -386,8 +371,6 @@ export default function StudioPage({
       }, {
         headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
-
-      clearInterval(pollTimer);
 
       if (response.data && response.data.audioUrl) {
         const fullAudioUrl = `${API_BASE}${response.data.audioUrl}`;
@@ -403,7 +386,9 @@ export default function StudioPage({
         }
 
         const newRecord = {
-          id: response.data.id || tempJobId,
+          id: response.data.historyRecord?.id || response.data.id || tempJobId,
+          userId: user?.id || null,
+          userEmail: user?.email || null,
           deviceId: devId,
           timestamp: new Date().toISOString(),
           text: text.trim().length > 120 ? text.trim().substring(0, 120) + '...' : text.trim(),
@@ -417,9 +402,7 @@ export default function StudioPage({
 
         setHistory((prev) => {
           const updated = [newRecord, ...prev.filter((item) => item.id !== tempJobId && item.id !== newRecord.id)];
-          try {
-            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated.slice(0, 50)));
-          } catch (e) {}
+          saveUserHistory(user, updated);
           return updated;
         });
 
@@ -430,8 +413,11 @@ export default function StudioPage({
         }, 100);
       }
     } catch (err) {
-      clearInterval(pollTimer);
-      setHistory((prev) => prev.filter((item) => item.id !== tempJobId));
+      setHistory((prev) => {
+        const filtered = prev.filter((item) => item.id !== tempJobId);
+        saveUserHistory(user, filtered);
+        return filtered;
+      });
       const msg = err.response?.data?.error || err.message || 'Error occurred during voice cloning.';
       setErrorMessage(`Synthesis failed: ${msg}`);
     } finally {
@@ -531,16 +517,29 @@ export default function StudioPage({
     }
   };
 
-  // Clear local storage history
+  // Clear local storage history (User-scoped)
   const handleCleanupStorage = async () => {
-    if (window.confirm('Clear your generation history on this device?')) {
-      const devId = getDeviceId();
+    if (window.confirm('Clear your generation history in this browser?')) {
+      const key = getUserStorageKey(user);
       try {
-        await axios.post(`${API_BASE}/api/history/clear`, { deviceId: devId });
+        localStorage.removeItem(key);
+        localStorage.removeItem('sk_voiceclone_studio_history');
       } catch (e) {}
-      localStorage.removeItem(LOCAL_STORAGE_KEY);
       setHistory([]);
       setAudioUrl(null);
+      setPlayingHistoryId(null);
+    }
+  };
+
+  // Delete individual history item from local storage
+  const handleDeleteHistoryItem = (itemId, e) => {
+    if (e) e.stopPropagation();
+    setHistory((prev) => {
+      const updated = prev.filter((item) => item.id !== itemId);
+      saveUserHistory(user, updated);
+      return updated;
+    });
+    if (playingHistoryId === itemId) {
       setPlayingHistoryId(null);
     }
   };
@@ -583,7 +582,7 @@ export default function StudioPage({
   const estimatedSeconds = Math.ceil(wordCount / 2.5);
 
   return (
-    <div className="flex-1 w-full relative z-10 py-6 px-4 sm:px-6 lg:px-8 text-zinc-100">
+    <div className="flex-1 w-full relative z-10 py-6 px-4 sm:px-6 lg:px-8 text-zinc-900">
       {/* Hidden audio preview ref */}
       <audio
         ref={previewAudioRef}
@@ -595,23 +594,23 @@ export default function StudioPage({
       />
 
       <div className="max-w-7xl mx-auto space-y-6">
-        {/* Commercial Account & Credit Status Strip (Clean Black & White) */}
-        <div className="p-4 rounded-2xl border border-zinc-800 bg-[#121215] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white text-black font-extrabold flex items-center justify-center text-sm shadow-md">
+        {/* Commercial Account & Credit Status Strip (Clean Light Theme) */}
+        <div className="p-4 sm:p-5 rounded-2xl border border-zinc-200/90 bg-white/95 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
+          <div className="flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-600 text-white font-extrabold flex items-center justify-center text-sm shadow-md shadow-indigo-500/25">
               ⚡
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-white">
+                <span className="text-xs font-extrabold uppercase tracking-wider text-zinc-900">
                   {currentPlan} Studio Plan
                 </span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold">
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold">
                   Active
                 </span>
               </div>
-              <p className="text-xs text-zinc-400 font-medium">
-                Available Credits: <strong className="text-white font-mono">{user?.credits?.toLocaleString() || '2,000'}</strong> • Limit: <span className="text-zinc-300">{maxCharsAllowed.toLocaleString()} chars / generation</span>
+              <p className="text-xs text-zinc-500 font-medium mt-0.5">
+                Available Credits: <strong className="text-indigo-950 font-mono font-extrabold">{user?.credits?.toLocaleString() || '2,000'}</strong> • Max Script: <span className="text-zinc-700 font-semibold">{maxCharsAllowed.toLocaleString()} chars</span>
               </p>
             </div>
           </div>
@@ -619,7 +618,7 @@ export default function StudioPage({
           <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end">
             <button
               onClick={() => onNavigate('pricing')}
-              className="px-4 py-2 rounded-xl text-xs font-bold bg-white hover:bg-zinc-200 text-black shadow-md shadow-white/5 transition-all active:scale-95 whitespace-nowrap"
+              className="px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white shadow-sm shadow-indigo-500/20 transition-all active:scale-95 whitespace-nowrap"
             >
               Upgrade Packages →
             </button>
@@ -634,8 +633,8 @@ export default function StudioPage({
             <div className={`p-5 rounded-2xl border backdrop-blur-md ${theme.cardBg}`}>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                 <div>
-                  <label htmlFor="voice-selector" className="text-sm font-semibold tracking-wide flex items-center gap-2 text-white">
-                    <svg width="16" height="16" className="w-4 h-4 text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <label htmlFor="voice-selector" className="text-sm font-semibold tracking-wide flex items-center gap-2 text-zinc-900">
+                    <svg width="16" height="16" className="w-4 h-4 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z" />
                     </svg>
                     <span>Target Reference Voice Model</span>
@@ -663,12 +662,12 @@ export default function StudioPage({
               {showUploadModal && (
                 <div className={`mb-4 p-4 rounded-xl border animate-fadeIn ${theme.panelBg}`}>
                   <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs font-bold uppercase tracking-wider text-white">
+                    <span className="text-xs font-bold uppercase tracking-wider text-zinc-900">
                       Upload Custom Voice Sample (.wav)
                     </span>
                     <button
                       onClick={() => setShowUploadModal(false)}
-                      className={`text-xs ${theme.textMuted} hover:text-white`}
+                      className={`text-xs ${theme.textMuted} hover:text-zinc-900`}
                     >
                       Close
                     </button>
@@ -683,7 +682,7 @@ export default function StudioPage({
                         setUploadFeedback(null);
                       }}
                       disabled={uploading}
-                      className="text-xs file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold cursor-pointer flex-1 file:bg-zinc-800 file:text-zinc-100 text-zinc-300"
+                      className="text-xs file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold cursor-pointer flex-1 file:bg-zinc-100 file:text-zinc-800 text-zinc-600"
                     />
                     <button
                       type="submit"
@@ -696,7 +695,7 @@ export default function StudioPage({
 
                   {uploadFeedback && (
                     <div className={`mt-2.5 text-xs p-2.5 rounded-lg border ${
-                      uploadFeedback.type === 'success' ? 'bg-zinc-900 border-zinc-700 text-zinc-200' : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                      uploadFeedback.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-700'
                     }`}>
                       {uploadFeedback.text}
                     </div>
@@ -765,7 +764,7 @@ export default function StudioPage({
             <div className={`p-5 rounded-2xl border backdrop-blur-md space-y-4 ${theme.cardBg}`}>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-inherit">
                 <div>
-                  <h3 className="text-sm font-bold tracking-wide flex items-center gap-2 text-white">
+                  <h3 className="text-sm font-bold tracking-wide flex items-center gap-2 text-zinc-900">
                     <span>Human Tone, Pitch & Delivery Studio</span>
                   </h3>
                   <p className={`text-xs ${theme.textMuted}`}>
@@ -781,14 +780,14 @@ export default function StudioPage({
                       setSpeed(-8);
                       setPause(0.22);
                     }}
-                    className="text-xs font-medium px-2.5 py-1 rounded-lg border transition-all text-zinc-400 border-zinc-800 hover:bg-zinc-800 hover:text-white"
+                    className="text-xs font-medium px-2.5 py-1 rounded-lg border transition-all text-zinc-600 border-zinc-200 hover:bg-zinc-100 hover:text-zinc-900 cursor-pointer"
                   >
                     Reset Defaults
                   </button>
                   <button
                     type="button"
                     onClick={() => setShowAcousticControls(!showAcousticControls)}
-                    className="text-xs font-semibold px-2.5 py-1 rounded-lg transition-all border text-zinc-200 bg-zinc-800/80 border-zinc-700 hover:bg-zinc-700"
+                    className="text-xs font-semibold px-2.5 py-1 rounded-lg transition-all border text-zinc-800 bg-zinc-100 border-zinc-300 hover:bg-zinc-200 cursor-pointer"
                   >
                     {showAcousticControls ? 'Hide Sliders' : 'Fine-Tune Sliders'}
                   </button>
@@ -800,20 +799,20 @@ export default function StudioPage({
                   {/* Pitch Slider */}
                   <div>
                     <div className="flex justify-between items-center text-xs mb-1.5">
-                      <span className="font-semibold flex items-center gap-1.5 text-zinc-200">
+                      <span className="font-semibold flex items-center gap-1.5 text-zinc-800">
                         Vocal Pitch Offset
                         <span className={`text-[11px] font-normal ${theme.textMuted}`}>(Baritone Depth vs High Tone)</span>
                       </span>
                       <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold text-xs text-white">
+                        <span className="font-mono font-bold text-xs text-zinc-900">
                           {pitch > 0 ? `+${pitch}Hz` : `${pitch}Hz`}
                         </span>
                         <div className="flex items-center gap-1">
                           <button
                             type="button"
                             onClick={() => setPitch(-4)}
-                            className={`text-[10px] px-2 py-0.5 rounded font-semibold transition-all border ${
-                              pitch === -4 ? 'bg-white text-black border-white' : 'bg-zinc-900 text-zinc-300 border-zinc-800 hover:bg-zinc-800'
+                            className={`text-[10px] px-2 py-0.5 rounded font-semibold transition-all border cursor-pointer ${
+                              pitch === -4 ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-100'
                             }`}
                           >
                             Deep Baritone (-4Hz)
@@ -821,8 +820,8 @@ export default function StudioPage({
                           <button
                             type="button"
                             onClick={() => setPitch(0)}
-                            className={`text-[10px] px-2 py-0.5 rounded font-semibold transition-all border ${
-                              pitch === 0 ? 'bg-white text-black border-white' : 'bg-zinc-900 text-zinc-300 border-zinc-800 hover:bg-zinc-800'
+                            className={`text-[10px] px-2 py-0.5 rounded font-semibold transition-all border cursor-pointer ${
+                              pitch === 0 ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-100'
                             }`}
                           >
                             Natural (0)
@@ -830,8 +829,8 @@ export default function StudioPage({
                           <button
                             type="button"
                             onClick={() => setPitch(3)}
-                            className={`text-[10px] px-2 py-0.5 rounded font-semibold transition-all border ${
-                              pitch === 3 ? 'bg-white text-black border-white' : 'bg-zinc-900 text-zinc-300 border-zinc-800 hover:bg-zinc-800'
+                            className={`text-[10px] px-2 py-0.5 rounded font-semibold transition-all border cursor-pointer ${
+                              pitch === 3 ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-100'
                             }`}
                           >
                             Crisp High (+3Hz)
@@ -846,7 +845,7 @@ export default function StudioPage({
                       step="1"
                       value={pitch}
                       onChange={(e) => setPitch(parseInt(e.target.value))}
-                      className="w-full cursor-pointer h-1.5 rounded-lg accent-white bg-zinc-800"
+                      className="w-full cursor-pointer h-1.5 rounded-lg accent-zinc-900 bg-zinc-200"
                     />
                     <div className={`flex justify-between text-[10px] ${theme.textMuted} mt-1`}>
                       <span>Deep Resonant Baritone (-15Hz)</span>
@@ -859,8 +858,8 @@ export default function StudioPage({
                     {/* Speaking Pace */}
                     <div>
                       <div className="flex justify-between items-center text-xs mb-1">
-                        <span className="font-semibold text-zinc-200">Speaking Pace</span>
-                        <span className="font-mono text-xs font-bold text-white">
+                        <span className="font-semibold text-zinc-800">Speaking Pace</span>
+                        <span className="font-mono text-xs font-bold text-zinc-900">
                           {speed > 0 ? `+${speed}%` : `${speed}%`}
                         </span>
                       </div>
@@ -871,11 +870,11 @@ export default function StudioPage({
                         step="2"
                         value={speed}
                         onChange={(e) => setSpeed(parseInt(e.target.value))}
-                        className="w-full cursor-pointer h-1.5 rounded-lg accent-white bg-zinc-800"
+                        className="w-full cursor-pointer h-1.5 rounded-lg accent-zinc-900 bg-zinc-200"
                       />
                       <div className={`flex justify-between text-[10px] ${theme.textMuted} mt-0.5`}>
                         <span>Slow (-30%)</span>
-                        <span className="font-semibold text-zinc-200">Default (-8%)</span>
+                        <span className="font-semibold text-zinc-700">Default (-8%)</span>
                         <span>Fast (+30%)</span>
                       </div>
                     </div>
@@ -883,8 +882,8 @@ export default function StudioPage({
                     {/* Sentence Pause */}
                     <div>
                       <div className="flex justify-between items-center text-xs mb-1">
-                        <span className="font-semibold text-zinc-200">Breath & Pause</span>
-                        <span className="font-mono text-xs font-bold text-white">
+                        <span className="font-semibold text-zinc-800">Breath & Pause</span>
+                        <span className="font-mono text-xs font-bold text-zinc-900">
                           {pause.toFixed(2)}s
                         </span>
                       </div>
@@ -895,11 +894,11 @@ export default function StudioPage({
                         step="0.02"
                         value={pause}
                         onChange={(e) => setPause(parseFloat(e.target.value))}
-                        className="w-full cursor-pointer h-1.5 rounded-lg accent-white bg-zinc-800"
+                        className="w-full cursor-pointer h-1.5 rounded-lg accent-zinc-900 bg-zinc-200"
                       />
                       <div className={`flex justify-between text-[10px] ${theme.textMuted} mt-0.5`}>
                         <span>Snappy (0.08s)</span>
-                        <span className="font-semibold text-zinc-200">Natural (0.22s)</span>
+                        <span className="font-semibold text-zinc-700">Natural (0.22s)</span>
                         <span>Dramatic (0.60s)</span>
                       </div>
                     </div>
@@ -912,7 +911,7 @@ export default function StudioPage({
             <div className={`p-5 sm:p-6 rounded-2xl border backdrop-blur-md space-y-4 ${theme.cardBg}`}>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
-                  <label htmlFor="script-textarea" className="text-sm font-semibold tracking-wide text-white">
+                  <label htmlFor="script-textarea" className="text-sm font-semibold tracking-wide text-zinc-900">
                     Script / Story Text
                   </label>
                   <p className={`text-xs ${theme.textMuted}`}>
@@ -925,28 +924,28 @@ export default function StudioPage({
                   <button
                     type="button"
                     onClick={() => setText("Deep within the silent ocean trenches lies an untouched realm of darkness and wonder, older than the continents themselves.")}
-                    className="text-[11px] px-2.5 py-1 rounded-md border font-medium border-zinc-800 bg-zinc-900 text-zinc-300 hover:text-white"
+                    className="text-[11px] px-2.5 py-1 rounded-md border font-medium border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200 hover:text-zinc-900 cursor-pointer"
                   >
                     English
                   </button>
                   <button
                     type="button"
                     onClick={() => setText("السلام علیکم۔ زندگی کا ہر نیا دن امید، حوصلے اور خوابوں کو تعبیر دینے کا ایک شاندار موقع ہے۔")}
-                    className="text-[11px] px-2.5 py-1 rounded-md border font-medium border-zinc-800 bg-zinc-900 text-zinc-300 hover:text-white"
+                    className="text-[11px] px-2.5 py-1 rounded-md border font-medium border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200 hover:text-zinc-900 cursor-pointer"
                   >
                     Urdu اردو
                   </button>
                   <button
                     type="button"
                     onClick={() => setText("नमस्ते। सफलता का रहस्य निरंतर प्रयास, अटूट विश्वास और सकारात्मक सोच में छिपा है।")}
-                    className="text-[11px] px-2.5 py-1 rounded-md border font-medium border-zinc-800 bg-zinc-900 text-zinc-300 hover:text-white"
+                    className="text-[11px] px-2.5 py-1 rounded-md border font-medium border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200 hover:text-zinc-900 cursor-pointer"
                   >
                     Hindi हिन्दी
                   </button>
                   <button
                     type="button"
                     onClick={() => setText("مرحباً بكم. المستقبل يُبنى بالإرادة الصادقة والعمل الدؤوب، متطلعين دائماً نحو القمة.")}
-                    className="text-[11px] px-2.5 py-1 rounded-md border font-medium border-zinc-800 bg-zinc-900 text-zinc-300 hover:text-white"
+                    className="text-[11px] px-2.5 py-1 rounded-md border font-medium border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200 hover:text-zinc-900 cursor-pointer"
                   >
                     Arabic العربية
                   </button>
@@ -955,7 +954,7 @@ export default function StudioPage({
 
               {/* Error Message */}
               {errorMessage && (
-                <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-sm flex items-start gap-3">
+                <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-sm flex items-start gap-3">
                   <svg width="20" height="20" className="w-5 h-5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
@@ -965,13 +964,13 @@ export default function StudioPage({
 
               {/* Character Limit Exceeded Warning */}
               {charCount > maxCharsAllowed && (
-                <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center justify-between gap-3">
+                <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center justify-between gap-3">
                   <span>
                     Current script ({charCount.toLocaleString()} chars) exceeds your {currentPlan} plan limit ({maxCharsAllowed.toLocaleString()} chars).
                   </span>
                   <button
                     onClick={() => onNavigate('pricing')}
-                    className="underline font-bold text-amber-200 hover:text-white"
+                    className="underline font-bold text-amber-900 hover:text-black cursor-pointer"
                   >
                     Upgrade Plan
                   </button>
@@ -989,8 +988,8 @@ export default function StudioPage({
                   disabled={loading}
                   className={`w-full rounded-xl border p-4 text-sm focus:outline-none transition-all resize-y leading-relaxed font-normal ${theme.inputBg}`}
                 />
-                <div className="absolute bottom-3 right-3 text-xs flex items-center gap-2 pointer-events-none select-none text-zinc-400">
-                  <span className={`font-semibold ${charCount > maxCharsAllowed ? 'text-rose-400' : 'text-zinc-300'}`}>
+                <div className="absolute bottom-3 right-3 text-xs flex items-center gap-2 pointer-events-none select-none text-zinc-500">
+                  <span className={`font-semibold ${charCount > maxCharsAllowed ? 'text-rose-600' : 'text-zinc-700'}`}>
                     {charCount.toLocaleString()} / {maxCharsAllowed.toLocaleString()} chars
                   </span>
                   <span className="opacity-40">•</span>
@@ -1004,21 +1003,21 @@ export default function StudioPage({
                   type="button"
                   onClick={handleGenerateSubmit}
                   disabled={loading || !text.trim() || !referenceVoice || charCount > maxCharsAllowed}
-                  className={`w-full py-4 px-6 rounded-2xl text-sm font-bold tracking-wide transition-all duration-200 flex items-center justify-center gap-3 cursor-pointer disabled:cursor-not-allowed active:scale-[0.99] bg-white hover:bg-zinc-100 text-black shadow-lg shadow-white/5 border border-zinc-200/20 ${
+                  className={`w-full py-4 px-6 rounded-2xl text-sm font-extrabold tracking-wide transition-all duration-200 flex items-center justify-center gap-3 cursor-pointer disabled:cursor-not-allowed active:scale-[0.99] bg-gradient-to-r from-indigo-600 via-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white shadow-xl shadow-indigo-500/25 ${
                     loading || !text.trim() || !referenceVoice || charCount > maxCharsAllowed ? 'opacity-60' : 'opacity-100'
                   }`}
                 >
                   {loading ? (
                     <>
-                      <svg width="18" height="18" className="animate-spin h-4 w-4 fill-current shrink-0" fill="none" viewBox="0 0 24 24">
+                      <svg width="18" height="18" className="animate-spin h-5 w-5 fill-current shrink-0" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
-                      <span>Synthesizing Ultra-Human Audio...</span>
+                      <span>Synthesizing Studio Audio...</span>
                     </>
                   ) : (
                     <>
-                      <svg width="18" height="18" className="w-5 h-5 fill-current shrink-0" viewBox="0 0 24 24">
+                      <svg width="20" height="20" className="w-5 h-5 fill-current shrink-0" viewBox="0 0 24 24">
                         <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z" />
                       </svg>
                       <span>
@@ -1030,39 +1029,66 @@ export default function StudioPage({
               </div>
             </div>
 
-            {/* Mastered Output Audio Ready Card */}
+            {/* Mastered Output Audio Ready Console (DAW Master Rack Aesthetic) */}
             {audioUrl && (
-              <div className={`p-6 rounded-2xl border backdrop-blur-md space-y-4 animate-fadeIn ${theme.cardBg}`}>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="p-6 rounded-3xl bg-zinc-950 text-white border border-zinc-800 shadow-2xl space-y-5 animate-fadeIn relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
                   <div>
-                    <div className="flex items-center gap-2">
-                      <span className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></span>
-                      <h3 className="text-sm font-bold tracking-wide text-white">
+                    <div className="flex items-center gap-2.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                      <h3 className="text-sm sm:text-base font-extrabold tracking-tight text-white">
                         Mastered Studio Audio Ready
                       </h3>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-bold">
+                        320kbps MP3
+                      </span>
                     </div>
-                    <p className="text-[11px] text-amber-300 font-mono mt-0.5">
-                      ⏱️ Available for download for 24 hours (temporary storage auto-cleanup)
+                    <p className="text-xs text-zinc-400 mt-1">
+                      Rendered with <strong className="text-zinc-200">{currentVoiceObj?.name || referenceVoice.replace('.wav', '')}</strong> • Saved to your client history
                     </p>
                   </div>
+
                   <button
                     type="button"
                     onClick={() => handleDownloadAudio(audioUrl, referenceVoice)}
-                    className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all inline-flex items-center gap-1.5 ${theme.btnSecondary}`}
+                    className="px-4 py-2.5 rounded-xl text-xs font-bold transition-all inline-flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white shadow-lg shadow-indigo-500/25 active:scale-95 shrink-0"
                   >
-                    <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                     </svg>
-                    <span>Download Broadcast MP3</span>
+                    <span>Download MP3</span>
                   </button>
                 </div>
+
+                {/* Glowing Equalizer Soundwave Visualizer */}
+                <div className="p-4 rounded-2xl bg-zinc-900/90 border border-zinc-800 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-1.5 h-10 flex-1 overflow-hidden px-2">
+                    {[40, 75, 55, 90, 60, 100, 35, 80, 50, 95, 45, 85, 65, 90, 30, 70, 85, 40, 75, 55, 95, 60, 80, 50].map((h, i) => (
+                      <span
+                        key={i}
+                        className="w-1.5 rounded-full bg-gradient-to-t from-indigo-500 via-purple-400 to-pink-400 animate-pulse"
+                        style={{
+                          height: `${h}%`,
+                          animationDelay: `${i * 60}ms`
+                        }}
+                      ></span>
+                    ))}
+                  </div>
+                  <span className="text-xs font-mono text-zinc-400 font-semibold px-2">
+                    Stereo 48kHz
+                  </span>
+                </div>
+
+                {/* Native Audio Controls */}
                 <audio
                   ref={audioPlayerRef}
                   src={audioUrl}
                   controls
                   crossOrigin="anonymous"
                   preload="auto"
-                  className="w-full focus:outline-none"
+                  className="w-full focus:outline-none rounded-xl"
                   onEnded={() => setPlayingHistoryId(null)}
                   onPause={() => setPlayingHistoryId(null)}
                 />
@@ -1075,8 +1101,8 @@ export default function StudioPage({
             <div className={`p-5 rounded-2xl border backdrop-blur-md space-y-4 ${theme.sidebarBg}`}>
               <div className="flex items-center justify-between pb-2 border-b border-inherit">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-bold tracking-wide text-white">Recent Generations</h3>
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 font-mono">
+                  <h3 className="text-sm font-bold tracking-wide text-zinc-900">Recent Generations</h3>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-700 font-mono">
                     {history.length}
                   </span>
                 </div>
@@ -1084,7 +1110,7 @@ export default function StudioPage({
                   <button
                     type="button"
                     onClick={handleCleanupStorage}
-                    className="text-xs text-zinc-400 hover:text-rose-400 transition-colors"
+                    className="text-xs text-zinc-500 hover:text-rose-600 transition-colors cursor-pointer"
                   >
                     Clear All
                   </button>
@@ -1103,9 +1129,9 @@ export default function StudioPage({
 
               <div className="space-y-2.5 max-h-[600px] overflow-y-auto pr-1">
                 {loadingHistory ? (
-                  <div className="p-4 text-center text-xs text-zinc-400">Loading device history...</div>
+                  <div className="p-4 text-center text-xs text-zinc-500">Loading device history...</div>
                 ) : filteredHistory.length === 0 ? (
-                  <div className="p-6 text-center text-xs text-zinc-400 border border-dashed rounded-xl border-inherit">
+                  <div className="p-6 text-center text-xs text-zinc-500 border border-dashed rounded-xl border-zinc-300">
                     No past generations yet. Click Synthesize to create your first clip.
                   </div>
                 ) : (
@@ -1117,17 +1143,17 @@ export default function StudioPage({
                       return (
                         <div
                           key={item.id}
-                          className="p-3.5 rounded-xl border bg-zinc-900 border-zinc-700 text-xs space-y-2"
+                          className="p-3.5 rounded-xl border bg-zinc-50 border-zinc-200 text-xs space-y-2"
                         >
                           <div className="flex items-center justify-between">
-                            <span className="font-bold text-white">
+                            <span className="font-bold text-zinc-900">
                               {(item.referenceVoice || 'Voice').replace('.wav', '')}
                             </span>
-                            <span className="text-[10px] font-bold text-emerald-400 animate-pulse">
+                            <span className="text-[10px] font-bold text-emerald-600 animate-pulse">
                               Synthesizing...
                             </span>
                           </div>
-                          <p className="text-zinc-400 line-clamp-2 italic">"{item.text}"</p>
+                          <p className="text-zinc-600 line-clamp-2 italic">"{item.text}"</p>
                         </div>
                       );
                     }
@@ -1139,18 +1165,28 @@ export default function StudioPage({
                       return (
                         <div
                           key={item.id}
-                          className="p-3.5 rounded-xl border border-zinc-800 bg-zinc-900/40 text-xs space-y-2 opacity-80"
+                          className="p-3.5 rounded-xl border border-zinc-200 bg-zinc-50/60 text-xs space-y-2 opacity-80"
                         >
                           <div className="flex items-center justify-between gap-2">
-                            <span className="text-xs font-bold truncate text-zinc-300">
+                            <span className="text-xs font-bold truncate text-zinc-700">
                               {item.referenceVoice ? item.referenceVoice.replace('.wav', '') : 'Voice'}
                             </span>
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">
-                              📁 Purged (24h)
-                            </span>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-zinc-200 text-zinc-600">
+                                📁 Purged (24h)
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => handleDeleteHistoryItem(item.id, e)}
+                                className="text-zinc-400 hover:text-rose-600 px-1 text-xs cursor-pointer"
+                                title="Delete from history"
+                              >
+                                ✕
+                              </button>
+                            </div>
                           </div>
-                          <p className="text-zinc-400 line-clamp-2 italic leading-relaxed">"{item.text}"</p>
-                          <div className="pt-2 border-t border-zinc-800/80 flex justify-end">
+                          <p className="text-zinc-500 line-clamp-2 italic leading-relaxed">"{item.text}"</p>
+                          <div className="pt-2 border-t border-zinc-200 flex justify-end">
                             <button
                               type="button"
                               onClick={() => {
@@ -1158,7 +1194,7 @@ export default function StudioPage({
                                 if (item.referenceVoice) setReferenceVoice(item.referenceVoice);
                                 window.scrollTo({ top: 300, behavior: 'smooth' });
                               }}
-                              className="text-[11px] font-bold text-white hover:underline cursor-pointer"
+                              className="text-[11px] font-bold text-zinc-900 hover:underline cursor-pointer"
                             >
                               ↺ Load Script in Editor
                             </button>
@@ -1173,35 +1209,45 @@ export default function StudioPage({
                         onClick={() => handleQuickPlay(item)}
                         className={`p-3.5 rounded-xl border cursor-pointer transition-all hover:scale-[1.01] flex flex-col gap-2 ${
                           isPlaying
-                            ? 'bg-zinc-800 border-zinc-600 shadow-lg text-white'
-                            : 'bg-zinc-900/40 hover:bg-zinc-900 border-zinc-800'
+                            ? 'bg-zinc-100 border-zinc-400 shadow-md text-zinc-900'
+                            : 'bg-white hover:bg-zinc-50 border-zinc-200 text-zinc-900 shadow-xs'
                         }`}
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-bold truncate text-white">
+                          <span className="text-xs font-bold truncate text-zinc-900">
                             {item.referenceVoice ? item.referenceVoice.replace('.wav', '') : 'Voice'}
                           </span>
-                          <span className="text-[10px] text-zinc-400 font-mono">
-                            {item.timestamp ? new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                          </span>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="text-[10px] text-zinc-500 font-mono">
+                              {item.timestamp ? new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => handleDeleteHistoryItem(item.id, e)}
+                              className="text-zinc-400 hover:text-rose-600 px-1 text-xs cursor-pointer"
+                              title="Delete from history"
+                            >
+                              ✕
+                            </button>
+                          </div>
                         </div>
 
-                        <p className="text-xs text-zinc-400 line-clamp-2 italic leading-relaxed">
+                        <p className="text-xs text-zinc-600 line-clamp-2 italic leading-relaxed">
                           "{item.text}"
                         </p>
 
-                        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-zinc-800">
+                        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-zinc-200">
                           <button
                             type="button"
                             onClick={(e) => handleQuickPlay(item, e)}
-                            className="py-1 px-2 rounded-lg text-xs font-semibold bg-white text-black hover:bg-zinc-200 text-center"
+                            className="py-1 px-2 rounded-lg text-xs font-semibold bg-zinc-900 text-white hover:bg-zinc-800 text-center cursor-pointer"
                           >
                             {isPlaying ? 'Pause' : 'Play'}
                           </button>
                           <button
                             type="button"
                             onClick={(e) => handleDownloadAudio(item.audioUrl, item.referenceVoice, e, item.id)}
-                            className="py-1 px-2 rounded-lg text-xs font-semibold border border-zinc-700 hover:bg-zinc-800 text-zinc-200 text-center"
+                            className="py-1 px-2 rounded-lg text-xs font-semibold border border-zinc-300 hover:bg-zinc-100 text-zinc-800 text-center cursor-pointer"
                           >
                             Download
                           </button>
