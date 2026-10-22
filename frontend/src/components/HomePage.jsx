@@ -194,7 +194,7 @@ export default function HomePage({
                   onClick={() => {
                     try {
                       localStorage.setItem('sk_voiceclone_selected_voice', 'Adam (Deep Narration - ElevenLabs Style).wav');
-                    } catch (e) {}
+                    } catch (e) { }
                     onNavigate('studio');
                   }}
                   className="px-3 py-1.5 rounded-xl text-xs font-bold bg-violet-50 hover:bg-violet-100 text-violet-700 border border-violet-100 transition-colors shadow-2xs cursor-pointer active:scale-95"
@@ -214,11 +214,10 @@ export default function HomePage({
                         height: isPlayingDemo ? `${h}%` : '20%',
                         transition: 'height 0.2s ease'
                       }}
-                      className={`w-1 sm:w-1.5 rounded-full ${
-                        isPlayingDemo
+                      className={`w-1 sm:w-1.5 rounded-full ${isPlayingDemo
                           ? 'bg-gradient-to-t from-violet-600 via-purple-500 to-indigo-500 animate-pulse'
                           : 'bg-violet-300/80'
-                      }`}
+                        }`}
                     ></span>
                   ))}
                 </div>
@@ -302,7 +301,7 @@ export default function HomePage({
                       Input Text & Select Voice
                     </h3>
                   </div>
-                  
+
                   {/* Visual Mockup inside Card 1 */}
                   <div className="p-4 rounded-2xl bg-slate-50/90 border border-zinc-200/80 flex flex-col justify-between gap-3 min-h-[195px]">
                     <div className="flex items-center justify-between text-[11px] text-zinc-500 font-medium">

@@ -234,7 +234,7 @@ export default function App() {
     }
     try {
       localStorage.setItem('sk_voiceclone_auth_user', JSON.stringify(userData));
-    } catch (e) {}
+    } catch (e) { }
     setActivePage('studio');
     if (typeof window !== 'undefined') {
       window.history.pushState({ page: 'studio' }, '', '/studio');
@@ -248,7 +248,7 @@ export default function App() {
       localStorage.removeItem('sk_voiceclone_auth_token');
       localStorage.removeItem('sk_voiceclone_auth_user');
       delete axios.defaults.headers.common['Authorization'];
-    } catch (e) {}
+    } catch (e) { }
     if (activePage === 'studio' || activePage === 'dashboard' || activePage === 'admin') {
       setActivePage('home');
       if (typeof window !== 'undefined') {
@@ -286,7 +286,7 @@ export default function App() {
     setUser(updatedUser);
     try {
       localStorage.setItem('sk_voiceclone_auth_user', JSON.stringify(updatedUser));
-    } catch (e) {}
+    } catch (e) { }
   };
 
   const handleDeductCredits = (val, isExactRemaining = false) => {
@@ -299,7 +299,7 @@ export default function App() {
     setUser(updatedUser);
     try {
       localStorage.setItem('sk_voiceclone_auth_user', JSON.stringify(updatedUser));
-    } catch (e) {}
+    } catch (e) { }
   };
 
   /**
@@ -403,7 +403,7 @@ export default function App() {
                 setUser(updated);
                 try {
                   localStorage.setItem('sk_voiceclone_auth_user', JSON.stringify(updated));
-                } catch (e) {}
+                } catch (e) { }
               }}
             />
           ) : (
