@@ -270,174 +270,170 @@ export default function HomePage({
                 </button>
               </div>
             </div>
+          </div>
 
-            {/* Glowing Frosted Metrics Ribbon (Matching Image 2) */}
-            <div className="mt-8 text-center relative z-10">
-              <div className="inline-flex items-center flex-wrap justify-center gap-4 sm:gap-8 px-6 sm:px-8 py-3 rounded-full bg-white/95 border border-violet-100 shadow-xl shadow-violet-500/10 backdrop-blur-md text-xs sm:text-sm font-medium text-zinc-700">
-                <div>
-                  <strong className="text-zinc-900 font-extrabold">10M+</strong> characters generated
-                </div>
-                <div className="hidden sm:inline text-zinc-300">•</div>
-                <div>
-                  <strong className="text-zinc-900 font-extrabold">99.8%</strong> human parity
-                </div>
-                <div className="hidden sm:inline text-zinc-300">•</div>
-                <div>
-                  <strong className="text-zinc-900 font-extrabold">50K+</strong> developers & creators
-                </div>
+          {/* Glowing Frosted Metrics Ribbon (Matching Image 2) */}
+          <div className="mt-8 sm:mt-10 text-center relative z-10 px-4">
+            <div className="inline-flex items-center flex-wrap justify-center gap-3 sm:gap-6 md:gap-8 px-5 sm:px-8 py-3 rounded-full bg-white/95 border border-violet-100 shadow-xl shadow-violet-500/10 backdrop-blur-md text-xs sm:text-sm font-medium text-zinc-700">
+              <div className="flex items-center gap-1.5">
+                <strong className="text-zinc-900 font-extrabold">10M+</strong> characters generated
+              </div>
+              <div className="hidden sm:inline text-zinc-300">•</div>
+              <div className="flex items-center gap-1.5">
+                <strong className="text-zinc-900 font-extrabold">99.8%</strong> human parity
+              </div>
+              <div className="hidden sm:inline text-zinc-300">•</div>
+              <div className="flex items-center gap-1.5">
+                <strong className="text-zinc-900 font-extrabold">50K+</strong> developers &amp; creators
               </div>
             </div>
+          </div>
 
-            {/* 3 Step Workflow Cards (Matching Image 2 Bottom Layout) */}
-            <div className="mt-12 sm:mt-16 grid grid-cols-1 md:grid-cols-3 gap-6 relative z-10 text-left items-stretch">
+          {/* 3 Step Workflow Cards (Matching Image 2 Bottom Layout) */}
+          <div className="mt-12 sm:mt-16 max-w-5xl lg:max-w-6xl mx-auto relative z-10 px-4 sm:px-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5 lg:gap-6 text-left items-stretch">
               {/* Step 1: Input Text & Select Voice */}
-              <div className="p-6 sm:p-7 rounded-3xl bg-white border border-zinc-200/90 shadow-md hover:shadow-lg transition-all flex flex-col justify-between h-full group">
-                <div>
-                  <div className="flex items-center gap-3 mb-5">
-                    <span className="w-8 h-8 rounded-xl bg-violet-100 text-violet-700 font-extrabold text-xs flex items-center justify-center shrink-0 shadow-2xs">
-                      1
+              <div className="p-5 sm:p-6 lg:p-7 rounded-3xl bg-white border border-zinc-200/90 shadow-md hover:shadow-lg transition-all flex flex-col h-full group">
+                <div className="flex items-center gap-3 mb-4 sm:mb-5 min-h-[44px]">
+                  <span className="w-8 h-8 rounded-xl bg-violet-100 text-violet-700 font-extrabold text-xs flex items-center justify-center shrink-0 shadow-2xs">
+                    1
+                  </span>
+                  <h3 className="text-base font-bold text-zinc-900 tracking-tight leading-snug">
+                    Input Text &amp; Select Voice
+                  </h3>
+                </div>
+
+                {/* Visual Mockup inside Card 1 */}
+                <div className="flex-1 p-4 rounded-2xl bg-slate-50/90 border border-zinc-200/80 flex flex-col justify-between gap-3 min-h-[200px]">
+                  <div className="flex items-center justify-between text-[11px] text-zinc-500 font-medium">
+                    <span className="flex items-center gap-1.5 font-semibold text-zinc-700">
+                      <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      <span>Script Editor</span>
                     </span>
-                    <h3 className="text-base font-bold text-zinc-900 tracking-tight leading-snug">
-                      Input Text & Select Voice
-                    </h3>
+                    <span className="px-2 py-0.5 rounded-md bg-violet-100 text-violet-700 text-[10px] font-mono font-bold">
+                      &lt;prompt&gt;
+                    </span>
                   </div>
 
-                  {/* Visual Mockup inside Card 1 */}
-                  <div className="p-4 rounded-2xl bg-slate-50/90 border border-zinc-200/80 flex flex-col justify-between gap-3 min-h-[195px]">
-                    <div className="flex items-center justify-between text-[11px] text-zinc-500 font-medium">
-                      <span className="flex items-center gap-1.5 font-semibold text-zinc-700">
-                        <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        <span>Script Editor</span>
-                      </span>
-                      <span className="px-2 py-0.5 rounded-md bg-violet-100 text-violet-700 text-[10px] font-mono font-bold">
-                        &lt;prompt&gt;
-                      </span>
-                    </div>
+                  <div className="text-xs text-zinc-700 font-mono bg-white p-3 rounded-xl border border-zinc-200/80 leading-relaxed shadow-2xs line-clamp-2">
+                    "Transform words into studio-grade human voices with hyper-realistic AI..."
+                  </div>
 
-                    <div className="text-xs text-zinc-700 font-mono bg-white p-3 rounded-xl border border-zinc-200/80 leading-relaxed shadow-2xs line-clamp-2">
-                      "Transform words into studio-grade human voices with hyper-realistic AI..."
-                    </div>
-
-                    <div className="flex items-center justify-between text-[11px] text-zinc-500 pt-1.5 border-t border-zinc-200/60">
-                      <span className="font-medium text-zinc-700 flex items-center gap-1">
-                        <span>🇺🇸</span> Sarah (US)
-                      </span>
-                      <span className="font-mono font-semibold text-zinc-600">68 chars</span>
-                    </div>
+                  <div className="flex items-center justify-between text-[11px] text-zinc-500 pt-2 border-t border-zinc-200/60">
+                    <span className="font-medium text-zinc-700 flex items-center gap-1">
+                      <span>🇺🇸</span> Sarah (US)
+                    </span>
+                    <span className="font-mono font-semibold text-zinc-600">68 chars</span>
                   </div>
                 </div>
               </div>
 
               {/* Step 2: Generate & Refine */}
-              <div className="p-6 sm:p-7 rounded-3xl bg-white border border-zinc-200/90 shadow-md hover:shadow-lg transition-all flex flex-col justify-between h-full group">
-                <div>
-                  <div className="flex items-center gap-3 mb-5">
-                    <span className="w-8 h-8 rounded-xl bg-violet-100 text-violet-700 font-extrabold text-xs flex items-center justify-center shrink-0 shadow-2xs">
-                      2
+              <div className="p-5 sm:p-6 lg:p-7 rounded-3xl bg-white border border-zinc-200/90 shadow-md hover:shadow-lg transition-all flex flex-col h-full group">
+                <div className="flex items-center gap-3 mb-4 sm:mb-5 min-h-[44px]">
+                  <span className="w-8 h-8 rounded-xl bg-violet-100 text-violet-700 font-extrabold text-xs flex items-center justify-center shrink-0 shadow-2xs">
+                    2
+                  </span>
+                  <h3 className="text-base font-bold text-zinc-900 tracking-tight leading-snug">
+                    Generate &amp; Refine
+                  </h3>
+                </div>
+
+                {/* Visual Mockup inside Card 2 */}
+                <div className="flex-1 p-4 rounded-2xl bg-slate-50/90 border border-zinc-200/80 flex flex-col justify-between gap-3 min-h-[200px]">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      {/* Radial Progress Gauge */}
+                      <div className="relative w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center shrink-0">
+                        <svg className="w-9 h-9 sm:w-10 sm:h-10 transform -rotate-90" viewBox="0 0 36 36">
+                          <path className="text-zinc-200" strokeWidth="3.5" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                          <path className="text-violet-600" strokeDasharray="92, 100" strokeLinecap="round" strokeWidth="3.5" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                        </svg>
+                        <span className="absolute text-[10px] font-bold font-mono text-zinc-800">92%</span>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-zinc-900 truncate">Neural Synthesis</p>
+                        <p className="text-[10px] text-zinc-500 font-medium truncate">XTTS-v2 Engine</p>
+                      </div>
+                    </div>
+                    <span className="shrink-0 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">
+                      Processing
                     </span>
-                    <h3 className="text-base font-bold text-zinc-900 tracking-tight leading-snug">
-                      Generate & Refine
-                    </h3>
                   </div>
 
-                  {/* Visual Mockup inside Card 2 */}
-                  <div className="p-4 rounded-2xl bg-slate-50/90 border border-zinc-200/80 flex flex-col justify-between gap-3 min-h-[195px]">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2.5">
-                        {/* Radial Progress Gauge */}
-                        <div className="relative w-10 h-10 flex items-center justify-center shrink-0">
-                          <svg className="w-10 h-10 transform -rotate-90" viewBox="0 0 36 36">
-                            <path className="text-zinc-200" strokeWidth="3.5" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                            <path className="text-violet-600" strokeDasharray="92, 100" strokeLinecap="round" strokeWidth="3.5" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                          </svg>
-                          <span className="absolute text-[10px] font-bold font-mono text-zinc-800">92%</span>
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold text-zinc-900">Neural Synthesis</p>
-                          <p className="text-[10px] text-zinc-500 font-medium">XTTS-v2 Engine</p>
-                        </div>
-                      </div>
-                      <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">
-                        Processing
-                      </span>
+                  {/* Sliders */}
+                  <div className="space-y-1.5 bg-white p-2.5 rounded-xl border border-zinc-200/80 shadow-2xs">
+                    <div className="flex items-center justify-between text-[11px] text-zinc-600">
+                      <span>Pacing / Speed</span>
+                      <span className="font-mono font-bold text-zinc-900">1.05x</span>
                     </div>
+                    <div className="w-full h-1.5 bg-zinc-200 rounded-full relative">
+                      <div className="w-[60%] h-full bg-violet-600 rounded-full"></div>
+                      <div className="absolute top-1/2 left-[60%] -translate-x-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-violet-600 border-2 border-white shadow-xs"></div>
+                    </div>
+                  </div>
 
-                    {/* Sliders */}
-                    <div className="space-y-1.5 bg-white p-2.5 rounded-xl border border-zinc-200/80 shadow-2xs">
-                      <div className="flex items-center justify-between text-[11px] text-zinc-600">
-                        <span>Pacing / Speed</span>
-                        <span className="font-mono font-bold text-zinc-900">1.05x</span>
-                      </div>
-                      <div className="w-full h-1.5 bg-zinc-200 rounded-full relative">
-                        <div className="w-[60%] h-full bg-violet-600 rounded-full"></div>
-                        <div className="absolute top-1/2 left-[60%] -translate-x-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-violet-600 border-2 border-white shadow-xs"></div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between text-[11px] text-zinc-500 pt-1.5 border-t border-zinc-200/60">
-                      <span>Pitch: Natural</span>
-                      <span className="font-semibold text-violet-700">Studio Warm</span>
-                    </div>
+                  <div className="flex items-center justify-between text-[11px] text-zinc-500 pt-2 border-t border-zinc-200/60">
+                    <span>Pitch: Natural</span>
+                    <span className="font-semibold text-violet-700">Studio Warm</span>
                   </div>
                 </div>
               </div>
 
               {/* Step 3: Download & Integrate */}
-              <div className="p-6 sm:p-7 rounded-3xl bg-white border border-zinc-200/90 shadow-md hover:shadow-lg transition-all flex flex-col justify-between h-full group">
-                <div>
-                  <div className="flex items-center gap-3 mb-5">
-                    <span className="w-8 h-8 rounded-xl bg-violet-100 text-violet-700 font-extrabold text-xs flex items-center justify-center shrink-0 shadow-2xs">
-                      3
+              <div className="p-5 sm:p-6 lg:p-7 rounded-3xl bg-white border border-zinc-200/90 shadow-md hover:shadow-lg transition-all flex flex-col h-full group">
+                <div className="flex items-center gap-3 mb-4 sm:mb-5 min-h-[44px]">
+                  <span className="w-8 h-8 rounded-xl bg-violet-100 text-violet-700 font-extrabold text-xs flex items-center justify-center shrink-0 shadow-2xs">
+                    3
+                  </span>
+                  <h3 className="text-base font-bold text-zinc-900 tracking-tight leading-snug">
+                    Download &amp; Integrate
+                  </h3>
+                </div>
+
+                {/* Visual Mockup inside Card 3 */}
+                <div className="flex-1 p-4 rounded-2xl bg-slate-50/90 border border-zinc-200/80 flex flex-col justify-between gap-3 min-h-[200px]">
+                  {/* Top file row */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-8 h-8 rounded-xl bg-violet-100 text-violet-600 flex items-center justify-center shrink-0 shadow-2xs">
+                        <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 00-9.78 2.096A4.001 4.001 0 003 15z" />
+                        </svg>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-zinc-900 truncate">podcast_intro.mp3</p>
+                        <p className="text-[10px] text-zinc-500 truncate">320kbps • 44.1kHz</p>
+                      </div>
+                    </div>
+                    <span className="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      Ready
                     </span>
-                    <h3 className="text-base font-bold text-zinc-900 tracking-tight leading-snug">
-                      Download & Integrate
-                    </h3>
                   </div>
 
-                  {/* Visual Mockup inside Card 3 */}
-                  <div className="p-4 rounded-2xl bg-slate-50/90 border border-zinc-200/80 flex flex-col justify-between gap-3 min-h-[195px]">
-                    {/* Top file row */}
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="w-8 h-8 rounded-xl bg-violet-100 text-violet-600 flex items-center justify-center shrink-0 shadow-2xs">
-                          <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 00-9.78 2.096A4.001 4.001 0 003 15z" />
-                          </svg>
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold text-zinc-900 truncate">podcast_intro.mp3</p>
-                          <p className="text-[10px] text-zinc-500 truncate">320kbps • 44.1kHz</p>
-                        </div>
-                      </div>
-                      <span className="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        Ready
-                      </span>
+                  {/* Waveform & Duration */}
+                  <div className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-zinc-200/80 shadow-2xs">
+                    <div className="flex items-center gap-1">
+                      {[35, 75, 50, 90, 60, 40, 80, 55, 95, 45, 70, 30].map((h, i) => (
+                        <span key={i} style={{ height: `${h * 0.18}px` }} className="w-1 bg-violet-400 rounded-full"></span>
+                      ))}
                     </div>
-
-                    {/* Waveform & Duration */}
-                    <div className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-zinc-200/80 shadow-2xs">
-                      <div className="flex items-center gap-1">
-                        {[35, 75, 50, 90, 60, 40, 80, 55, 95, 45, 70, 30].map((h, i) => (
-                          <span key={i} style={{ height: `${h * 0.18}px` }} className="w-1 bg-violet-400 rounded-full"></span>
-                        ))}
-                      </div>
-                      <span className="text-[11px] font-mono text-zinc-400">0:45</span>
-                    </div>
-
-                    {/* Button Row - Cleanly positioned, no overlap! */}
-                    <button
-                      type="button"
-                      onClick={() => onNavigate('studio')}
-                      className="w-full py-2 px-3 rounded-xl text-xs font-bold bg-violet-600 hover:bg-violet-700 text-white shadow-sm shadow-violet-500/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
-                    >
-                      <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                      </svg>
-                      <span>Export MP3</span>
-                    </button>
+                    <span className="text-[11px] font-mono text-zinc-400">0:45</span>
                   </div>
+
+                  {/* Button Row */}
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('studio')}
+                    className="w-full py-2 px-3 rounded-xl text-xs font-bold bg-violet-600 hover:bg-violet-700 text-white shadow-sm shadow-violet-500/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                  >
+                    <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    <span>Export MP3</span>
+                  </button>
                 </div>
               </div>
             </div>
