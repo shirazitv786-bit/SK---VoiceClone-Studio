@@ -635,10 +635,75 @@ app.post('/api/upload-voice', authenticateToken, upload.single('voiceSample'), a
 app.get('/api/history', (req, res) => {
   const { deviceId } = req.query;
   const deviceActiveJobs = deviceId
-    ? Array.from(activeJobs.values()).filter(item => item.deviceId === deviceId)
+    ? Array.from(activeJobs.values()).filter(item => item.deviceId === deviceId && item.status === 'generating')
     : [];
   return res.json({ history: [], activeJobs: deviceActiveJobs });
 });
+
+/**
+ * GET /api/job-status/:jobId & GET /api/jobs/:jobId
+ * Returns current status of a generation job (generating, completed, failed)
+ * Allows client to survive browser refreshes and reconnect to in-progress synthesis.
+ */
+app.get(['/api/job-status/:jobId', '/api/jobs/:jobId'], optionalAuth, async (req, res) => {
+  const { jobId } = req.params;
+  if (!jobId) {
+    return res.status(400).json({ success: false, error: 'Job ID required.' });
+  }
+
+  // 1. Look in activeJobs memory cache
+  if (activeJobs.has(jobId)) {
+    const job = activeJobs.get(jobId);
+    return res.json({ success: true, job });
+  }
+
+  // 2. Check Database record if server restarted or job purged from memory
+  try {
+    const record = await prisma.generation.findUnique({
+      where: { id: jobId }
+    });
+    if (record) {
+      const filename = path.basename(record.audioUrl || `output_${record.id}.mp3`);
+      const fileExists = fs.existsSync(path.join(audioDir, filename));
+      if (fileExists) {
+        return res.json({
+          success: true,
+          job: {
+            id: record.id,
+            status: 'completed',
+            audioUrl: record.audioUrl,
+            referenceVoice: record.referenceVoice,
+            text: record.text,
+            speed: record.speed,
+            pitch: record.pitch,
+            pause: record.pause,
+            charsUsed: record.charsUsed,
+            historyRecord: {
+              id: record.id,
+              userId: record.userId,
+              deviceId: record.deviceId,
+              timestamp: record.createdAt ? record.createdAt.toISOString() : new Date().toISOString(),
+              text: record.text,
+              referenceVoice: record.referenceVoice,
+              audioUrl: record.audioUrl,
+              speed: record.speed,
+              pitch: record.pitch,
+              pause: record.pause,
+              status: 'ready'
+            }
+          }
+        });
+      }
+    }
+  } catch (e) {}
+
+  return res.json({
+    success: false,
+    status: 'not_found',
+    error: 'Job not found or synthesis has expired.'
+  });
+});
+
 
 /**
  * DELETE /api/history & POST /api/history/clear
@@ -788,10 +853,13 @@ app.post(['/api/clone-voice', '/api/generate'], ttsLimiter, optionalAuth, async 
   }
 
   const timestamp = Date.now();
+  const rawJobId = req.body.jobId;
+  const jobId = (rawJobId && typeof rawJobId === 'string' && rawJobId.startsWith('conv_'))
+    ? rawJobId
+    : `conv_${timestamp}`;
   const audioFilename = `output_${timestamp}.mp3`;
   const targetAudioPath = path.join(audioDir, audioFilename);
   const audioUrl = `/audio/${audioFilename}`;
-  const jobId = `conv_${timestamp}`;
 
   const optionsPayload = {
     speed: (speed !== undefined && speed !== null) ? parseInt(speed) : -8,
@@ -803,14 +871,20 @@ app.post(['/api/clone-voice', '/api/generate'], ttsLimiter, optionalAuth, async 
   activeJobs.set(jobId, {
     id: jobId,
     deviceId: deviceId,
+    userId: req.user ? req.user.id : null,
     timestamp: new Date().toISOString(),
     text: text.trim().length > 120 ? text.trim().substring(0, 120) + '...' : text.trim(),
     referenceVoice: resolvedVoiceFilename,
-    status: 'generating'
+    audioUrl: audioUrl,
+    speed: optionsPayload.speed,
+    pitch: optionsPayload.pitch,
+    pause: optionsPayload.pause,
+    status: 'generating',
+    createdAt: Date.now()
   });
 
   try {
-    console.log(`[TTS Engine] Synthesizing voice "${resolvedVoiceFilename}" (${detectedLang}) for device ${deviceId}...`);
+    console.log(`[TTS Engine] Synthesizing voice "${resolvedVoiceFilename}" (${detectedLang}) for device ${deviceId} [Job: ${jobId}]...`);
     const t0 = Date.now();
     const result = await synthesizeSpeech({
       id: jobId,
@@ -822,7 +896,7 @@ app.post(['/api/clone-voice', '/api/generate'], ttsLimiter, optionalAuth, async 
     });
 
     const elapsedMs = Date.now() - t0;
-    console.log(`[TTS Engine] Completed in ${elapsedMs}ms: ${audioFilename}`);
+    console.log(`[TTS Engine] Completed in ${elapsedMs}ms: ${audioFilename} [Job: ${jobId}]`);
 
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
@@ -835,10 +909,12 @@ app.post(['/api/clone-voice', '/api/generate'], ttsLimiter, optionalAuth, async 
       isExpired: false,
       text: text.trim().length > 120 ? text.trim().substring(0, 120) + '...' : text.trim(),
       referenceVoice: resolvedVoiceFilename,
-      audioUrl: audioUrl
+      audioUrl: audioUrl,
+      speed: optionsPayload.speed,
+      pitch: optionsPayload.pitch,
+      pause: optionsPayload.pause,
+      status: 'ready'
     };
-
-    activeJobs.delete(jobId);
 
     // Atomically deduct credits and record in PostgreSQL database if authenticated
     let remainingCredits = req.user ? req.user.credits : null;
@@ -876,22 +952,66 @@ app.post(['/api/clone-voice', '/api/generate'], ttsLimiter, optionalAuth, async 
       // Non-blocking log
     }
 
-    return res.json({
-      success: true,
+    // Retain completed job in memory for 30 minutes so reloaded clients / polling can fetch it
+    const completedJob = {
+      id: jobId,
+      userId: req.user ? req.user.id : null,
+      deviceId: deviceId,
+      timestamp: new Date().toISOString(),
+      status: 'completed',
       audioUrl: audioUrl,
       historyRecord: historyEntry,
       duration: `${(elapsedMs / 1000).toFixed(2)}s`,
       charsUsed: scriptLength,
-      remainingCredits: remainingCredits
-    });
+      remainingCredits: remainingCredits,
+      referenceVoice: resolvedVoiceFilename,
+      text: historyEntry.text,
+      speed: optionsPayload.speed,
+      pitch: optionsPayload.pitch,
+      pause: optionsPayload.pause,
+      completedAt: Date.now()
+    };
+    activeJobs.set(jobId, completedJob);
+    setTimeout(() => {
+      if (activeJobs.has(jobId) && activeJobs.get(jobId).status === 'completed') {
+        activeJobs.delete(jobId);
+      }
+    }, 30 * 60 * 1000);
+
+    if (!res.headersSent) {
+      return res.json({
+        success: true,
+        jobId: jobId,
+        audioUrl: audioUrl,
+        historyRecord: historyEntry,
+        duration: `${(elapsedMs / 1000).toFixed(2)}s`,
+        charsUsed: scriptLength,
+        remainingCredits: remainingCredits
+      });
+    }
   } catch (error) {
-    activeJobs.delete(jobId);
-    console.error('[TTS Engine] Synthesis failed:', error.message);
-    return res.status(500).json({
-      success: false,
-      error: 'Voice cloning generation failed.',
-      details: error.message
+    activeJobs.set(jobId, {
+      id: jobId,
+      deviceId: deviceId,
+      status: 'failed',
+      error: error.message || 'Voice cloning generation failed.',
+      failedAt: Date.now()
     });
+    setTimeout(() => {
+      if (activeJobs.has(jobId) && activeJobs.get(jobId).status === 'failed') {
+        activeJobs.delete(jobId);
+      }
+    }, 10 * 60 * 1000);
+
+    console.error('[TTS Engine] Synthesis failed:', error.message);
+    if (!res.headersSent) {
+      return res.status(500).json({
+        success: false,
+        jobId: jobId,
+        error: 'Voice cloning generation failed.',
+        details: error.message
+      });
+    }
   }
 });
 

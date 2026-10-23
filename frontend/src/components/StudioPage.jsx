@@ -53,6 +53,12 @@ export default function StudioPage({
     return 'sk_history_guest';
   };
 
+  const getPendingJobKey = (u) => {
+    if (u?.id) return `sk_pending_job_${u.id}`;
+    if (u?.email) return `sk_pending_job_${String(u.email).toLowerCase().replace(/[^a-z0-9_]/g, '_')}`;
+    return 'sk_pending_job_guest';
+  };
+
   const loadUserHistory = (u) => {
     try {
       // Clear legacy shared global history key so previous server records never appear
@@ -117,6 +123,157 @@ export default function StudioPage({
       }
     } catch (e) {}
   }, []);
+
+  // Resume in-progress synthesis if user refreshed the browser or navigated away
+  useEffect(() => {
+    let pollInterval = null;
+    let isCancelled = false;
+
+    const checkAndResumePendingJob = async () => {
+      try {
+        const pendingKey = getPendingJobKey(user);
+        const saved = localStorage.getItem(pendingKey);
+        if (!saved) return;
+
+        const pending = JSON.parse(saved);
+        if (!pending || !pending.jobId) {
+          localStorage.removeItem(pendingKey);
+          return;
+        }
+
+        // Clean up stale jobs older than 10 minutes
+        const ageMs = Date.now() - (pending.startedAt || 0);
+        if (ageMs > 10 * 60 * 1000) {
+          localStorage.removeItem(pendingKey);
+          return;
+        }
+
+        console.log(`[Studio] Reconnected to in-progress audio synthesis: ${pending.jobId}`);
+        setLoading(true);
+        if (pending.text) setText(pending.text);
+        if (pending.referenceVoice) setReferenceVoice(pending.referenceVoice);
+        if (pending.speed !== undefined) setSpeed(pending.speed);
+        if (pending.pitch !== undefined) setPitch(pending.pitch);
+        if (pending.pause !== undefined) setPause(pending.pause);
+
+        // Ensure optimistic generating card appears in history
+        setHistory((prev) => {
+          if (prev.some((item) => item.id === pending.jobId)) return prev;
+          const card = {
+            id: pending.jobId,
+            userId: user?.id || null,
+            userEmail: user?.email || null,
+            deviceId: getDeviceId(),
+            timestamp: new Date(pending.startedAt || Date.now()).toISOString(),
+            text: pending.text ? (pending.text.length > 120 ? pending.text.substring(0, 120) + '...' : pending.text) : 'Synthesizing voice...',
+            referenceVoice: pending.referenceVoice,
+            status: 'generating'
+          };
+          return [card, ...prev];
+        });
+
+        const token = localStorage.getItem('sk_voiceclone_auth_token');
+        const authHeaders = token ? { Authorization: `Bearer ${token}` } : {};
+
+        const pollStatus = async () => {
+          if (isCancelled) return;
+          try {
+            const res = await axios.get(`${API_BASE}/api/job-status/${pending.jobId}`, {
+              headers: authHeaders
+            });
+
+            if (res.data && res.data.success && res.data.job) {
+              const job = res.data.job;
+
+              if (job.status === 'completed' && job.audioUrl) {
+                if (pollInterval) clearInterval(pollInterval);
+                try { localStorage.removeItem(pendingKey); } catch (e) {}
+
+                const fullUrl = `${API_BASE}${job.audioUrl}`;
+                setAudioUrl(fullUrl);
+                setLoading(false);
+
+                const newRecord = {
+                  id: job.id || pending.jobId,
+                  userId: user?.id || null,
+                  userEmail: user?.email || null,
+                  deviceId: getDeviceId(),
+                  timestamp: new Date().toISOString(),
+                  text: pending.text ? (pending.text.length > 120 ? pending.text.substring(0, 120) + '...' : pending.text) : 'Synthesized audio',
+                  referenceVoice: pending.referenceVoice || job.referenceVoice,
+                  audioUrl: job.audioUrl,
+                  speed: pending.speed,
+                  pitch: pending.pitch,
+                  pause: pending.pause,
+                  status: 'ready'
+                };
+
+                setHistory((prev) => {
+                  const updated = [newRecord, ...prev.filter((i) => i.id !== pending.jobId && i.id !== newRecord.id)];
+                  saveUserHistory(user, updated);
+                  return updated;
+                });
+
+                if (job.remainingCredits !== undefined && job.remainingCredits !== null) {
+                  if (onDeductCredits) onDeductCredits(job.remainingCredits, true);
+                } else if (pending.text && onDeductCredits) {
+                  onDeductCredits(pending.text.length, false);
+                }
+                if (onRefreshUser) onRefreshUser();
+
+                setTimeout(() => {
+                  if (audioPlayerRef.current) {
+                    audioPlayerRef.current.play().catch(() => {});
+                  }
+                }, 200);
+                return;
+              }
+
+              if (job.status === 'failed') {
+                if (pollInterval) clearInterval(pollInterval);
+                try { localStorage.removeItem(pendingKey); } catch (e) {}
+                setLoading(false);
+                setErrorMessage(`Synthesis failed: ${job.error || 'Generation error'}`);
+                setHistory((prev) => {
+                  const filtered = prev.filter((i) => i.id !== pending.jobId);
+                  saveUserHistory(user, filtered);
+                  return filtered;
+                });
+                return;
+              }
+            } else if (res.data && res.data.status === 'not_found') {
+              // If not found and job is older than 2.5 minutes, clean up
+              if (Date.now() - (pending.startedAt || 0) > 150000) {
+                if (pollInterval) clearInterval(pollInterval);
+                try { localStorage.removeItem(pendingKey); } catch (e) {}
+                setLoading(false);
+                setHistory((prev) => {
+                  const filtered = prev.filter((i) => i.id !== pending.jobId);
+                  saveUserHistory(user, filtered);
+                  return filtered;
+                });
+              }
+            }
+          } catch (pollErr) {
+            console.warn('[Studio] Polling error:', pollErr.message);
+          }
+        };
+
+        await pollStatus();
+        pollInterval = setInterval(pollStatus, 1500);
+      } catch (err) {
+        console.warn('[Studio] Error checking pending job:', err);
+      }
+    };
+
+    checkAndResumePendingJob();
+
+    return () => {
+      isCancelled = true;
+      if (pollInterval) clearInterval(pollInterval);
+    };
+  }, [user?.id, user?.email]);
+
 
   // Voice Preview States (Main Bar)
   const [previewingVoice, setPreviewingVoice] = useState(false);
@@ -344,6 +501,25 @@ export default function StudioPage({
 
     const devId = getDeviceId();
     const tempJobId = `conv_${Date.now()}`;
+    const pendingKey = getPendingJobKey(user);
+
+    // Save pending job data to localStorage so synthesis can resume if user refreshes
+    const pendingJobData = {
+      jobId: tempJobId,
+      userId: user?.id || null,
+      userEmail: user?.email || null,
+      deviceId: devId,
+      text: text.trim(),
+      referenceVoice: referenceVoice,
+      speed: speed,
+      pitch: pitch,
+      pause: pause,
+      startedAt: Date.now()
+    };
+
+    try {
+      localStorage.setItem(pendingKey, JSON.stringify(pendingJobData));
+    } catch (e) {}
 
     // Optimistically insert a generating card
     const pendingRecord = {
@@ -357,11 +533,16 @@ export default function StudioPage({
       status: 'generating'
     };
 
-    setHistory((prev) => [pendingRecord, ...prev.filter((item) => item.id !== tempJobId)]);
+    setHistory((prev) => {
+      const updated = [pendingRecord, ...prev.filter((item) => item.id !== tempJobId)];
+      saveUserHistory(user, updated);
+      return updated;
+    });
 
     try {
       const token = localStorage.getItem('sk_voiceclone_auth_token');
       const response = await axios.post(`${API_BASE}/api/clone-voice`, {
+        jobId: tempJobId,
         text: text.trim(),
         referenceVoice: referenceVoice,
         deviceId: devId,
@@ -371,6 +552,10 @@ export default function StudioPage({
       }, {
         headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
+
+      try {
+        localStorage.removeItem(pendingKey);
+      } catch (e) {}
 
       if (response.data && response.data.audioUrl) {
         const fullAudioUrl = `${API_BASE}${response.data.audioUrl}`;
@@ -413,6 +598,10 @@ export default function StudioPage({
         }, 100);
       }
     } catch (err) {
+      try {
+        localStorage.removeItem(pendingKey);
+      } catch (e) {}
+
       setHistory((prev) => {
         const filtered = prev.filter((item) => item.id !== tempJobId);
         saveUserHistory(user, filtered);
