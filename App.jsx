@@ -47,7 +47,7 @@ const updateSeoMetadata = (page) => {
     pricing: {
       url: `${origin}/pricing`,
       title: 'Commercial Packages & Pricing Plans | SK - VoiceClone Studio',
-      description: 'Flexible, transparent pricing packages for commercial voice cloning and neural TTS synthesis. Free, Silver, Lite, Pro, and Studio tiers with broadcast rights.'
+      description: 'Flexible, transparent pricing packages for commercial voice cloning and neural TTS synthesis. Free, Basic, Silver, Lite, Pro, and Studio tiers with broadcast rights.'
     },
     studio: {
       url: `${origin}/studio`,
@@ -440,8 +440,10 @@ export default function App() {
         )}
       </main>
 
-      {/* Shared Footer across the site */}
-      <Footer onNavigate={handleNavigate} />
+      {/* Shared Footer across public pages (hidden on studio, dashboard, and admin workspaces) */}
+      {!['studio', 'dashboard', 'admin'].includes(activePage) && (
+        <Footer onNavigate={handleNavigate} />
+      )}
 
       {/* Auth Modal (Login / Sign Up) */}
       <AuthModal

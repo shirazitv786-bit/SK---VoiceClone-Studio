@@ -25,6 +25,7 @@ export default function Navbar({
 
   const planBadgeColors = {
     Free: 'bg-zinc-100 text-zinc-700 border-zinc-300',
+    Basic: 'bg-zinc-100 text-zinc-800 border-zinc-300 font-semibold',
     Silver: 'bg-zinc-200 text-zinc-800 border-zinc-300 font-bold',
     Lite: 'bg-zinc-100 text-zinc-700 border-zinc-300',
     Pro: 'bg-zinc-900 text-white border-zinc-900 font-extrabold',

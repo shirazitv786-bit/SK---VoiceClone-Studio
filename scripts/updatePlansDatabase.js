@@ -1,4 +1,5 @@
 const { prisma } = require('../prismaClient');
+const { DEFAULT_PLANS } = require('../utils/defaultPlans');
 
 async function updatePlans() {
   try {
@@ -15,17 +16,21 @@ async function updatePlans() {
       }
     }
 
-    const silverPlan = {
-      id: 'Silver',
-      name: 'Silver',
-      priceMonthly: 1600,
-      priceAnnual: 1280,
-      pricePKR: 'PKR 1,600',
-      displayPrice: 'PKR 1,600',
-      credits: '250,000 credits',
-      creditCount: 250000,
-      badge: 'Silver',
-      desc: 'Great for active creators seeking dependable voice cloning and extended generation limits.',
+    if (!Array.isArray(currentPlans) || currentPlans.length === 0) {
+      currentPlans = [...DEFAULT_PLANS];
+    }
+
+    const basicPlan = {
+      id: 'Basic',
+      name: 'Basic',
+      priceMonthly: 900,
+      priceAnnual: 720,
+      pricePKR: 'PKR 900',
+      displayPrice: 'PKR 900',
+      credits: '100,000 credits',
+      creditCount: 100000,
+      badge: null,
+      desc: 'Perfect for beginners and individual creators seeking reliable voice synthesis at an entry budget.',
       features: [
         'Community support 24/7',
         'MP3 download format',
@@ -33,28 +38,32 @@ async function updatePlans() {
         'Basic voice selection',
         'Max 5,000 characters per conversion'
       ],
-      buttonText: 'Subscribe to Silver',
+      buttonText: 'Subscribe to Basic',
       highlight: false,
       maxCharsPerGen: 5000,
-      customVoicesCount: 3,
-      maxQueuedTasks: 2,
+      customVoicesCount: 1,
+      maxQueuedTasks: 1,
       isEnabled: true
     };
 
-    // If Silver already exists in array, update it; otherwise insert between Starter/Free and Lite
-    const existingIndex = currentPlans.findIndex(p => p.id?.toLowerCase() === 'silver');
+    // If Basic already exists, update it; otherwise insert before Silver
+    const existingIndex = currentPlans.findIndex(p => p.id?.toLowerCase() === 'basic');
     if (existingIndex >= 0) {
-      currentPlans[existingIndex] = { ...currentPlans[existingIndex], ...silverPlan };
-      console.log('Updated existing Silver plan in plans_config.');
+      currentPlans[existingIndex] = { ...currentPlans[existingIndex], ...basicPlan };
+      console.log('Updated existing Basic plan in plans_config.');
     } else {
-      // Find insertion index (before Lite)
-      const liteIndex = currentPlans.findIndex(p => p.id?.toLowerCase() === 'lite');
-      if (liteIndex >= 0) {
-        currentPlans.splice(liteIndex, 0, silverPlan);
+      const silverIndex = currentPlans.findIndex(p => p.id?.toLowerCase() === 'silver');
+      if (silverIndex >= 0) {
+        currentPlans.splice(silverIndex, 0, basicPlan);
       } else {
-        currentPlans.push(silverPlan);
+        const freeIndex = currentPlans.findIndex(p => p.id?.toLowerCase() === 'free');
+        if (freeIndex >= 0) {
+          currentPlans.splice(freeIndex + 1, 0, basicPlan);
+        } else {
+          currentPlans.unshift(basicPlan);
+        }
       }
-      console.log('Inserted new Silver plan into plans_config.');
+      console.log('Inserted new Basic plan into plans_config.');
     }
 
     const updatedSetting = await prisma.systemSetting.upsert({

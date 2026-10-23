@@ -25,6 +25,27 @@ const DEFAULT_PLANS = [
     highlight: false
   },
   {
+    id: 'Basic',
+    name: 'Basic',
+    priceMonthly: 900,
+    priceAnnual: 720,
+    pricePKR: 'PKR 900',
+    displayPrice: 'PKR 900',
+    credits: '100,000 credits',
+    creditCount: 100000,
+    badge: null,
+    desc: 'Perfect for beginners and individual creators seeking reliable voice synthesis at an entry budget.',
+    features: [
+      'Community support 24/7',
+      'MP3 download format',
+      'Standard audio quality',
+      'Basic voice selection',
+      'Max 5,000 characters per conversion'
+    ],
+    buttonText: 'Subscribe to Basic',
+    highlight: false
+  },
+  {
     id: 'Silver',
     name: 'Silver',
     priceMonthly: 1600,
@@ -206,7 +227,7 @@ export default function PricingPage({
   const faqs = [
     {
       q: 'How do credits work in SK - VoiceClone Studio?',
-      a: '1 character in your script equals 1 credit. For example, a 500-character paragraph uses 500 credits. Our Free plan gives you 2,000 credits to test, while Silver offers 250,000 credits, Lite offers 500,000 credits (around 9 hours of finished audio), and Studio gives 3,000,000 credits (45+ hours).'
+      a: '1 character in your script equals 1 credit. For example, a 500-character paragraph uses 500 credits. Our Free plan gives you 2,000 credits to test, while Basic offers 100,000 credits, Silver offers 250,000 credits, Lite offers 500,000 credits (around 9 hours of finished audio), and Studio gives 3,000,000 credits (45+ hours).'
     },
     {
       q: 'What is the difference between V2 and V3 Voice Cloning models?',
@@ -214,7 +235,7 @@ export default function PricingPage({
     },
     {
       q: 'Can I use generated voices commercially?',
-      a: 'Yes! All plans including Silver, Lite, Pro, and Studio grant 100% royalty-free commercial usage rights for YouTube monetization, podcasts, audiobooks, video games, broadcast commercials, and client projects.'
+      a: 'Yes! All plans including Basic, Silver, Lite, Pro, and Studio grant 100% royalty-free commercial usage rights for YouTube monetization, podcasts, audiobooks, video games, broadcast commercials, and client projects.'
     },
     {
       q: 'What are cloned reference voice credits?',
@@ -222,7 +243,7 @@ export default function PricingPage({
     },
     {
       q: 'How long are purchased character credits valid?',
-      a: 'All character credits in Silver, Lite, Pro, and Studio packages are valid for 30 days from the date of activation. Unused credits expire after 30 days. You can easily renew or top up your package anytime to keep your voice synthesis active.'
+      a: 'All character credits in Basic, Silver, Lite, Pro, and Studio packages are valid for 30 days from the date of activation. Unused credits expire after 30 days. You can easily renew or top up your package anytime to keep your voice synthesis active.'
     },
     {
       q: 'Can I cancel or change my plan anytime?',
@@ -276,7 +297,7 @@ export default function PricingPage({
         </div>
 
         {/* The Pricing Cards */}
-        <div className={`grid grid-cols-1 md:grid-cols-2 ${plans.length >= 5 ? 'lg:grid-cols-3 xl:grid-cols-5' : 'lg:grid-cols-4'} gap-6 items-stretch`}>
+        <div className={`grid grid-cols-1 md:grid-cols-2 ${plans.length >= 6 ? 'lg:grid-cols-3 xl:grid-cols-3' : plans.length === 5 ? 'lg:grid-cols-3 xl:grid-cols-5' : 'lg:grid-cols-4'} gap-6 items-stretch`}>
           {plans.map((plan) => {
             const isCurrentPlan = user && user.plan === plan.id;
             const price = billingCycle === 'annual' ? plan.priceAnnual : plan.priceMonthly;
@@ -401,7 +422,7 @@ export default function PricingPage({
               Detailed Plan Feature Matrix
             </h2>
             <p className="text-xs sm:text-sm text-zinc-500 mt-2">
-              Compare features across Free, Silver, Lite, Pro, and Studio tiers to find your ideal workflow.
+              Compare features across Free, Basic, Silver, Lite, Pro, and Studio tiers to find your ideal workflow.
             </p>
           </div>
 
@@ -411,6 +432,7 @@ export default function PricingPage({
                 <tr className="border-b border-zinc-200 text-zinc-600 bg-zinc-50">
                   <th className="p-4 font-bold text-zinc-900">Features</th>
                   <th className="p-4 font-bold text-center text-zinc-800">Free</th>
+                  <th className="p-4 font-bold text-center text-zinc-800 bg-zinc-100/50">Basic</th>
                   <th className="p-4 font-bold text-center text-indigo-700 bg-indigo-50/60">Silver ★</th>
                   <th className="p-4 font-bold text-center text-zinc-800">Lite</th>
                   <th className="p-4 font-bold text-center text-zinc-900">Pro</th>
@@ -421,6 +443,7 @@ export default function PricingPage({
                 <tr>
                   <td className="p-4 font-semibold text-zinc-900">Monthly Credits</td>
                   <td className="p-4 text-center">2,000</td>
+                  <td className="p-4 text-center font-bold text-zinc-900 bg-zinc-50/40">100,000</td>
                   <td className="p-4 text-center font-bold text-indigo-900 bg-indigo-50/20">250,000</td>
                   <td className="p-4 text-center font-bold text-zinc-900">500,000</td>
                   <td className="p-4 text-center font-bold text-zinc-900">1,000,000</td>
@@ -429,6 +452,7 @@ export default function PricingPage({
                 <tr>
                   <td className="p-4 font-semibold text-zinc-900">Character Limit / Generation</td>
                   <td className="p-4 text-center">2,000 chars</td>
+                  <td className="p-4 text-center font-medium bg-zinc-50/40">5,000 chars</td>
                   <td className="p-4 text-center font-bold text-indigo-900 bg-indigo-50/20">5,000 chars</td>
                   <td className="p-4 text-center">5,000 chars</td>
                   <td className="p-4 text-center">6,000 chars</td>
@@ -437,6 +461,7 @@ export default function PricingPage({
                 <tr>
                   <td className="p-4 font-semibold text-zinc-900">Cloned Voice Slots</td>
                   <td className="p-4 text-center">None</td>
+                  <td className="p-4 text-center bg-zinc-50/40">1 voice</td>
                   <td className="p-4 text-center font-bold text-indigo-900 bg-indigo-50/20">3 voices</td>
                   <td className="p-4 text-center">5 voices</td>
                   <td className="p-4 text-center">15 voices</td>
@@ -445,6 +470,7 @@ export default function PricingPage({
                 <tr>
                   <td className="p-4 font-semibold text-zinc-900">Concurrent Queued Tasks</td>
                   <td className="p-4 text-center">1 task</td>
+                  <td className="p-4 text-center bg-zinc-50/40">1 task</td>
                   <td className="p-4 text-center font-bold text-indigo-900 bg-indigo-50/20">2 tasks</td>
                   <td className="p-4 text-center">1 task</td>
                   <td className="p-4 text-center">3 tasks</td>
@@ -453,6 +479,7 @@ export default function PricingPage({
                 <tr>
                   <td className="p-4 font-semibold text-zinc-900">AI Voice Engine</td>
                   <td className="p-4 text-center">Standard Edge</td>
+                  <td className="p-4 text-center bg-zinc-50/40">Standard Edge + Basic AI</td>
                   <td className="p-4 text-center font-bold text-indigo-900 bg-indigo-50/20">Standard Edge + Basic AI</td>
                   <td className="p-4 text-center">V2 Multilingual</td>
                   <td className="p-4 text-center">V2 Multilingual</td>
@@ -461,6 +488,7 @@ export default function PricingPage({
                 <tr>
                   <td className="p-4 font-semibold text-zinc-900">Audio Quality & Bitrate</td>
                   <td className="p-4 text-center">Standard MP3</td>
+                  <td className="p-4 text-center bg-zinc-50/40">Standard MP3</td>
                   <td className="p-4 text-center font-bold text-indigo-900 bg-indigo-50/20">Standard MP3</td>
                   <td className="p-4 text-center">HD MP3 / 24kHz</td>
                   <td className="p-4 text-center">Studio Master / 24kHz</td>
@@ -469,6 +497,7 @@ export default function PricingPage({
                 <tr>
                   <td className="p-4 font-semibold text-zinc-900">Support SLA</td>
                   <td className="p-4 text-center">Community</td>
+                  <td className="p-4 text-center bg-zinc-50/40">Community 24/7</td>
                   <td className="p-4 text-center font-bold text-indigo-900 bg-indigo-50/20">Community 24/7</td>
                   <td className="p-4 text-center">Standard Email</td>
                   <td className="p-4 text-center">Priority 36h</td>
@@ -477,6 +506,7 @@ export default function PricingPage({
                 <tr>
                   <td className="p-4 font-semibold text-zinc-900">Commercial Rights</td>
                   <td className="p-4 text-center text-zinc-400">Personal Only</td>
+                  <td className="p-4 text-center text-emerald-700 font-semibold bg-zinc-50/40">✓ Commercial MP3</td>
                   <td className="p-4 text-center font-bold text-indigo-600 bg-indigo-50/20">✓ Commercial MP3</td>
                   <td className="p-4 text-center text-emerald-700 font-semibold">✓ Full Commercial</td>
                   <td className="p-4 text-center text-emerald-700 font-semibold">✓ Full Commercial</td>
@@ -600,7 +630,7 @@ export default function PricingPage({
                   <div className="flex justify-between">
                     <span className="text-zinc-500">Voice Cloning Slots:</span>
                     <span className="font-bold text-zinc-800">
-                      {selectedPlanModal.id === 'Free' ? 'Standard Only' : selectedPlanModal.id === 'Silver' ? '3 Slots' : selectedPlanModal.id === 'Lite' ? '5 Slots' : selectedPlanModal.id === 'Pro' ? '15 Slots' : '30 Slots'}
+                      {selectedPlanModal.id === 'Free' ? 'Standard Only' : selectedPlanModal.id === 'Basic' ? '1 Slot' : selectedPlanModal.id === 'Silver' ? '3 Slots' : selectedPlanModal.id === 'Lite' ? '5 Slots' : selectedPlanModal.id === 'Pro' ? '15 Slots' : '30 Slots'}
                     </span>
                   </div>
                   <div className="flex justify-between">

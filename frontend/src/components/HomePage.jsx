@@ -633,7 +633,7 @@ export default function HomePage({
               Plans Starting From <span className="text-indigo-600">FREE</span>
             </h2>
             <p className="text-xs sm:text-sm text-zinc-600 mt-3 leading-relaxed">
-              Explore our flexible commercial tiers: <strong className="text-zinc-900">Free (2k credits)</strong>, <strong className="text-indigo-600 font-extrabold">Silver (PKR 1,600/mo)</strong>, <strong className="text-zinc-900">Lite (PKR 2,800/mo)</strong>, <strong className="text-zinc-900">Pro (PKR 4,750/mo)</strong>, and <strong className="text-zinc-900">Studio (PKR 6,700/mo)</strong> with up to 3,000,000 characters and 30 cloned voices.
+              Explore our flexible commercial tiers: <strong className="text-zinc-900">Free (2k credits)</strong>, <strong className="text-zinc-900 font-extrabold">Basic (PKR 900/mo)</strong>, <strong className="text-indigo-600 font-extrabold">Silver (PKR 1,600/mo)</strong>, <strong className="text-zinc-900">Lite (PKR 2,800/mo)</strong>, <strong className="text-zinc-900">Pro (PKR 4,750/mo)</strong>, and <strong className="text-zinc-900">Studio (PKR 6,700/mo)</strong> with up to 3,000,000 characters and 30 cloned voices.
             </p>
             <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
               <button

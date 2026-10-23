@@ -15,6 +15,7 @@ const resolveAudioUrl = (url) => {
 
 export default function UserDashboard({ user, onNavigate, onOpenManualPayment, onUpdateUser, dynamicPlans }) {
   const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'generations' | 'settings' | 'billing'
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [dashboardData, setDashboardData] = useState(null);
   const [generations, setGenerations] = useState([]);
   const [payments, setPayments] = useState([]);
@@ -251,13 +252,62 @@ export default function UserDashboard({ user, onNavigate, onOpenManualPayment, o
   ];
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fadeIn text-zinc-900">
+    <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-5 sm:py-8 animate-fadeIn text-zinc-900">
       <div className="bg-white rounded-3xl border border-zinc-200/90 shadow-sm overflow-hidden flex flex-col md:flex-row min-h-[820px]">
+        {/* ===== MOBILE HEADER BAR (Visible only on mobile to hide/expand menu) ===== */}
+        <div className="md:hidden flex items-center justify-between px-4 py-3.5 border-b border-zinc-200/80 bg-white sticky top-0 z-20">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-violet-600 to-indigo-600 text-white flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
+              <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                <rect x="2" y="9" width="2.5" height="6" rx="1.25" />
+                <rect x="6.5" y="5" width="2.5" height="14" rx="1.25" />
+                <rect x="11" y="2" width="2.5" height="20" rx="1.25" />
+                <rect x="15.5" y="6" width="2.5" height="12" rx="1.25" />
+                <rect x="20" y="10" width="2.5" height="4" rx="1.25" />
+              </svg>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="font-extrabold text-sm tracking-tight text-zinc-900">VoiceWeave</span>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-violet-100 text-violet-700">AI</span>
+            </div>
+            <span className="text-zinc-300">/</span>
+            <div className="flex items-center gap-1 truncate text-xs font-bold text-violet-700 bg-violet-50 px-2.5 py-1 rounded-lg border border-violet-100/90">
+              <span>{navTabs.find((t) => t.id === activeTab)?.label || 'Overview'}</span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen((prev) => !prev)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 active:scale-95 ${
+              mobileMenuOpen
+                ? 'bg-violet-600 text-white shadow-xs'
+                : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-800 border border-zinc-200'
+            }`}
+            aria-label={mobileMenuOpen ? 'Hide Menu' : 'Expand Menu'}
+          >
+            <span>{mobileMenuOpen ? 'Hide' : 'Menu'}</span>
+            {mobileMenuOpen ? (
+              <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            )}
+          </button>
+        </div>
+
         {/* ===== ASIDE BAR (SIDEBAR Matching Image 1) ===== */}
-        <aside className="w-full md:w-64 border-r border-zinc-200/80 p-5 sm:p-6 flex flex-col justify-between shrink-0 bg-white">
+        <aside
+          className={`${
+            mobileMenuOpen ? 'flex' : 'hidden'
+          } md:flex flex-col w-full md:w-64 border-b md:border-b-0 md:border-r border-zinc-200/80 p-5 sm:p-6 justify-between shrink-0 bg-white transition-all`}
+        >
           <div>
-            {/* Logo */}
-            <div className="flex items-center gap-2 mb-6">
+            {/* Logo (Desktop only, mobile has it in header) */}
+            <div className="hidden md:flex items-center gap-2 mb-6">
               <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-violet-600 to-indigo-600 text-white flex items-center justify-center font-bold text-sm shadow-sm">
                 <svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24">
                   <rect x="2" y="9" width="2.5" height="6" rx="1.25" />
@@ -274,7 +324,7 @@ export default function UserDashboard({ user, onNavigate, onOpenManualPayment, o
             </div>
 
             {/* Account Profile Card */}
-            <div className="flex items-center gap-3 px-1 py-3 mb-6">
+            <div className="flex items-center gap-3 px-3 py-3 mb-6 bg-zinc-50 md:bg-transparent rounded-2xl md:rounded-none border border-zinc-200/60 md:border-0">
               <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-violet-600 to-indigo-600 text-white font-bold text-sm flex items-center justify-center shrink-0 shadow-xs uppercase">
                 {currentUser?.name ? currentUser.name[0] : 'A'}
               </div>
@@ -293,7 +343,10 @@ export default function UserDashboard({ user, onNavigate, onOpenManualPayment, o
                 return (
                   <button
                     key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
+                    onClick={() => {
+                      setActiveTab(tab.id);
+                      setMobileMenuOpen(false);
+                    }}
                     className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                       isActive
                         ? 'bg-violet-100/70 text-violet-800 font-bold'
@@ -311,21 +364,34 @@ export default function UserDashboard({ user, onNavigate, onOpenManualPayment, o
           </div>
 
           {/* Bottom Quick Links */}
-          <div className="pt-6 border-t border-zinc-100 space-y-2">
+          <div className="pt-6 border-t border-zinc-100 space-y-2 mt-4 md:mt-0">
             <button
-              onClick={() => onNavigate('studio')}
+              onClick={() => {
+                setMobileMenuOpen(false);
+                onNavigate('studio');
+              }}
               className="w-full py-2 px-3 rounded-xl text-xs font-bold bg-zinc-900 text-white hover:bg-zinc-800 transition-all flex items-center justify-center gap-2 shadow-xs cursor-pointer"
             >
               <span>🎙️ Studio DAW</span>
             </button>
             {(currentUser?.role === 'admin' || currentUser?.role === 'superadmin') && (
               <button
-                onClick={() => onNavigate('admin')}
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  onNavigate('admin');
+                }}
                 className="w-full py-2 px-3 rounded-xl text-xs font-bold bg-zinc-100 hover:bg-zinc-200 text-zinc-800 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 <span>🛡️ Admin Panel</span>
               </button>
             )}
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(false)}
+              className="md:hidden w-full py-2 px-3 rounded-xl text-xs font-semibold text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 transition-all flex items-center justify-center gap-1.5 cursor-pointer mt-1"
+            >
+              <span>✕ Close Menu</span>
+            </button>
           </div>
         </aside>
 
@@ -360,21 +426,62 @@ export default function UserDashboard({ user, onNavigate, onOpenManualPayment, o
                 </button>
               </div>
 
-              {/* 4 Metric KPI Cards in a Row (Matching Image 1) */}
+              {/* 4 Metric KPI Cards in a Row (Real-time Dynamic Data) */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {/* Card 1: Credits Remaining with Circular Gauge */}
                 {(() => {
-                  const planName = (stats.activePlan || 'Free').toLowerCase();
-                  const planTotal = planName.includes('silver')
-                    ? 250000
-                    : planName.includes('lite')
-                    ? 500000
-                    : planName.includes('pro')
-                    ? 1000000
-                    : planName.includes('studio')
-                    ? 3000000
-                    : 2000;
-                  const pct = 92; // Benchmark metric matching Image 1 mockup
+                  const currentPlanName = currentUser?.plan || stats.activePlan || 'Free';
+                  const planObj = dynamicPlans?.find(
+                    (p) =>
+                      p.id?.toLowerCase() === currentPlanName.toLowerCase() ||
+                      p.name?.toLowerCase() === currentPlanName.toLowerCase()
+                  );
+
+                  let planTotal = planObj?.creditCount || planObj?.creditsCount;
+                  if (!planTotal) {
+                    const lower = currentPlanName.toLowerCase();
+                    if (lower.includes('studio')) planTotal = 3000000;
+                    else if (lower.includes('pro')) planTotal = 1000000;
+                    else if (lower.includes('lite')) planTotal = 500000;
+                    else if (lower.includes('silver')) planTotal = 250000;
+                    else if (lower.includes('basic')) planTotal = 100000;
+                    else planTotal = 2000;
+                  }
+
+                  const currentCredits = typeof currentUser?.credits === 'number'
+                    ? currentUser.credits
+                    : (typeof stats.creditsRemaining === 'number' ? stats.creditsRemaining : 2000);
+                  const maxCredits = Math.max(planTotal, currentCredits);
+
+                  // Percentage of credits remaining (for gauge and real-time status)
+                  const remainingPct = maxCredits > 0
+                    ? Math.min(100, Math.max(0, Math.round((currentCredits / maxCredits) * 100)))
+                    : 0;
+                  const usedPct = Math.max(0, 100 - remainingPct);
+
+                  // Real-time reset cycle calculation
+                  let resetText = '30 days';
+                  if (stats.isSubscriptionExpired) {
+                    resetText = 'Expired';
+                  } else if (stats.daysRemaining !== null && stats.daysRemaining !== undefined) {
+                    if (stats.daysRemaining === 0 && stats.hoursRemaining) {
+                      resetText = `${stats.hoursRemaining}h remaining`;
+                    } else {
+                      resetText = `${stats.daysRemaining} days`;
+                    }
+                  } else {
+                    const expiry = currentUser?.creditsExpiresAt || currentUser?.subscriptionEndDate;
+                    if (expiry) {
+                      const diff = new Date(expiry).getTime() - Date.now();
+                      const days = Math.max(0, Math.ceil(diff / (24 * 60 * 60 * 1000)));
+                      resetText = `${days} days`;
+                    } else if (currentUser?.createdAt) {
+                      const createdMs = new Date(currentUser.createdAt).getTime();
+                      const daysSince = Math.floor((Date.now() - createdMs) / (24 * 60 * 60 * 1000)) % 30;
+                      const daysLeft = Math.max(1, 30 - daysSince);
+                      resetText = `${daysLeft} days`;
+                    }
+                  }
 
                   return (
                     <div className="p-5 rounded-2xl border bg-white border-zinc-200/90 shadow-2xs flex flex-col justify-between">
@@ -385,12 +492,15 @@ export default function UserDashboard({ user, onNavigate, onOpenManualPayment, o
                       <div className="flex items-center justify-between gap-3 my-1">
                         <div>
                           <div className="text-xl sm:text-2xl font-bold text-zinc-900 tracking-tight">
-                            1,845<span className="text-zinc-400 font-normal text-sm"> / 2,000</span>
+                            {currentCredits.toLocaleString()}
+                            <span className="text-zinc-400 font-normal text-sm">
+                              {' '}/ {maxCredits.toLocaleString()}
+                            </span>
                           </div>
                           <p className="text-[11px] text-zinc-500 font-medium mt-1">
-                            <span className="font-bold text-zinc-700">92%</span> Used
+                            <span className="font-bold text-zinc-700">{usedPct}%</span> Used
                           </p>
-                          <p className="text-[10px] text-zinc-400">reset: 5 days</p>
+                          <p className="text-[10px] text-zinc-400">reset: {resetText}</p>
                         </div>
 
                         {/* Circular Progress Gauge */}
@@ -405,7 +515,7 @@ export default function UserDashboard({ user, onNavigate, onOpenManualPayment, o
                             />
                             <path
                               className="text-violet-600 transition-all duration-700 ease-out"
-                              strokeDasharray={`${pct}, 100`}
+                              strokeDasharray={`${remainingPct}, 100`}
                               strokeLinecap="round"
                               strokeWidth="3.5"
                               stroke="currentColor"
@@ -414,7 +524,7 @@ export default function UserDashboard({ user, onNavigate, onOpenManualPayment, o
                             />
                           </svg>
                           <span className="absolute text-[11px] font-bold font-mono text-zinc-900">
-                            {pct}%
+                            {remainingPct}%
                           </span>
                         </div>
                       </div>
@@ -423,64 +533,97 @@ export default function UserDashboard({ user, onNavigate, onOpenManualPayment, o
                 })()}
 
                 {/* Card 2: Total Characters Voiced */}
-                <div className="p-5 rounded-2xl border bg-white border-zinc-200/90 shadow-2xs flex flex-col justify-between">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-semibold text-zinc-600">Total Characters Voiced</span>
-                    <div className="w-7 h-7 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center">
-                      <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77zm-2.5 9.77H8l-4 4V7l4 4h3.5l4-4v14l-4-4z" />
-                      </svg>
+                {(() => {
+                  const totalChars = typeof stats.totalCharsUsed === 'number' && stats.totalCharsUsed > 0
+                    ? stats.totalCharsUsed
+                    : generations.reduce((sum, g) => sum + (g.charsUsed || 0), 0);
+
+                  const formatCount = (val) => {
+                    if (val >= 1000000) return `${(val / 1000000).toFixed(1)}M`;
+                    if (val >= 1000) return `${(val / 1000).toFixed(1)}K`;
+                    return val.toLocaleString();
+                  };
+
+                  const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+                  const recentChars = generations
+                    .filter((g) => new Date(g.createdAt).getTime() >= oneWeekAgo)
+                    .reduce((sum, g) => sum + (g.charsUsed || 0), 0);
+
+                  return (
+                    <div className="p-5 rounded-2xl border bg-white border-zinc-200/90 shadow-2xs flex flex-col justify-between">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-semibold text-zinc-600">Total Characters Voiced</span>
+                        <div className="w-7 h-7 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center">
+                          <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77zm-2.5 9.77H8l-4 4V7l4 4h3.5l4-4v14l-4-4z" />
+                          </svg>
+                        </div>
+                      </div>
+                      <div className="my-1">
+                        <div className="text-xl sm:text-2xl font-bold text-zinc-900 tracking-tight">
+                          {formatCount(totalChars)}
+                        </div>
+                        <p className="text-[11px] text-emerald-600 font-semibold mt-1">
+                          {recentChars > 0 ? `+${formatCount(recentChars)} this week` : 'Live usage tracker'}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="my-1">
-                    <div className="text-xl sm:text-2xl font-bold text-zinc-900 tracking-tight">
-                      238K
-                    </div>
-                    <p className="text-[11px] text-emerald-600 font-semibold mt-1">
-                      +12K this week
-                    </p>
-                  </div>
-                </div>
+                  );
+                })()}
 
                 {/* Card 3: Voice Clones Created */}
-                <div className="p-5 rounded-2xl border bg-white border-zinc-200/90 shadow-2xs flex flex-col justify-between">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-semibold text-zinc-600">Voice Clones Created</span>
-                    <div className="w-7 h-7 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center">
-                      <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z" />
-                      </svg>
+                {(() => {
+                  const uniqueVoices = new Set(
+                    generations.map((g) => g.referenceVoice || g.speaker).filter(Boolean)
+                  );
+                  const activeClones = Math.max(uniqueVoices.size, generations.length > 0 ? 1 : 0);
+
+                  return (
+                    <div className="p-5 rounded-2xl border bg-white border-zinc-200/90 shadow-2xs flex flex-col justify-between">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-semibold text-zinc-600">Voice Clones Created</span>
+                        <div className="w-7 h-7 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center">
+                          <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z" />
+                          </svg>
+                        </div>
+                      </div>
+                      <div className="my-1">
+                        <div className="text-xl sm:text-2xl font-bold text-zinc-900 tracking-tight">
+                          {activeClones} Active {activeClones === 1 ? 'Clone' : 'Clones'}
+                        </div>
+                        <p className="text-[11px] text-zinc-500 mt-1">
+                          {activeClones > 0 ? `${activeClones} voice profile${activeClones === 1 ? '' : 's'} used` : 'Instant cloning ready'}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="my-1">
-                    <div className="text-xl sm:text-2xl font-bold text-zinc-900 tracking-tight">
-                      4 Active Clones
-                    </div>
-                    <p className="text-[11px] text-zinc-500 mt-1">
-                      2 templates available
-                    </p>
-                  </div>
-                </div>
+                  );
+                })()}
 
                 {/* Card 4: Audio Files Saved */}
-                <div className="p-5 rounded-2xl border bg-white border-zinc-200/90 shadow-2xs flex flex-col justify-between">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-semibold text-zinc-600">Audio Files Saved</span>
-                    <div className="w-7 h-7 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center">
-                      <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z" />
-                      </svg>
+                {(() => {
+                  const fileCount = generations.length;
+                  return (
+                    <div className="p-5 rounded-2xl border bg-white border-zinc-200/90 shadow-2xs flex flex-col justify-between">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-semibold text-zinc-600">Audio Files Saved</span>
+                        <div className="w-7 h-7 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center">
+                          <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z" />
+                          </svg>
+                        </div>
+                      </div>
+                      <div className="my-1">
+                        <div className="text-xl sm:text-2xl font-bold text-zinc-900 tracking-tight">
+                          {fileCount} {fileCount === 1 ? 'File' : 'Files'}
+                        </div>
+                        <p className="text-[11px] text-zinc-500 mt-1">
+                          {fileCount > 0 ? 'Managed in Audio Library' : '0 storage used'}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="my-1">
-                    <div className="text-xl sm:text-2xl font-bold text-zinc-900 tracking-tight">
-                      128 Files
-                    </div>
-                    <p className="text-[11px] text-zinc-500 mt-1">
-                      45MB total storage
-                    </p>
-                  </div>
-                </div>
+                  );
+                })()}
               </div>
 
               {/* Audio Library Table (Matching Image 1) */}

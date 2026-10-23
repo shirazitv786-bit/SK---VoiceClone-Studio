@@ -376,6 +376,7 @@ router.post('/update-plan', authenticateToken, async (req, res) => {
 
     let plansMap = {
       Free: 2000,
+      Basic: 100000,
       Silver: 250000,
       Lite: 500000,
       Pro: 1000000,

@@ -22,6 +22,12 @@ export default function ManualPaymentModal({
 
   // Available Plan Packages with Dynamic Fallback
   const DEFAULT_PLAN_DETAILS = {
+    Basic: {
+      name: 'Basic Plan',
+      pricePKR: 'PKR 900',
+      credits: '100,000 characters',
+      features: 'Community Support 24/7 • Max 5,000 chars/conversion • MP3 format'
+    },
     Silver: {
       name: 'Silver Plan',
       pricePKR: 'PKR 1,600',

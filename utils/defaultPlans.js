@@ -29,6 +29,31 @@ const DEFAULT_PLANS = [
     isEnabled: true
   },
   {
+    id: 'Basic',
+    name: 'Basic',
+    priceMonthly: 900,
+    priceAnnual: 720,
+    pricePKR: 'PKR 900',
+    displayPrice: 'PKR 900',
+    credits: '100,000 credits',
+    creditCount: 100000,
+    badge: null,
+    desc: 'Perfect for beginners and individual creators seeking reliable voice synthesis at an entry budget.',
+    features: [
+      'Community support 24/7',
+      'MP3 download format',
+      'Standard audio quality',
+      'Basic voice selection',
+      'Max 5,000 characters per conversion'
+    ],
+    buttonText: 'Subscribe to Basic',
+    highlight: false,
+    maxCharsPerGen: 5000,
+    customVoicesCount: 1,
+    maxQueuedTasks: 1,
+    isEnabled: true
+  },
+  {
     id: 'Silver',
     name: 'Silver',
     priceMonthly: 1600,

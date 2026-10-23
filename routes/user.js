@@ -222,8 +222,9 @@ router.post('/manual-payment', (req, res, next) => {
     }
 
     // Dynamically retrieve configured plans
-    let validPlans = ['Silver', 'Lite', 'Pro', 'Studio'];
+    let validPlans = ['Basic', 'Silver', 'Lite', 'Pro', 'Studio'];
     let planAmounts = {
+      Basic: 'PKR 900',
       Silver: 'PKR 1,600',
       Lite: 'PKR 2,800',
       Pro: 'PKR 4,750',

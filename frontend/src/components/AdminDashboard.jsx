@@ -40,6 +40,31 @@ const DEFAULT_PLANS_TEMPLATE = [
     isEnabled: true
   },
   {
+    id: 'Basic',
+    name: 'Basic',
+    priceMonthly: 900,
+    priceAnnual: 720,
+    pricePKR: 'PKR 900',
+    displayPrice: 'PKR 900',
+    credits: '100,000 credits',
+    creditCount: 100000,
+    badge: '',
+    desc: 'Perfect for beginners and individual creators seeking reliable voice synthesis at an entry budget.',
+    features: [
+      'Community support 24/7',
+      'MP3 download format',
+      'Standard audio quality',
+      'Basic voice selection',
+      'Max 5,000 characters per conversion'
+    ],
+    buttonText: 'Subscribe to Basic',
+    highlight: false,
+    maxCharsPerGen: 5000,
+    customVoicesCount: 1,
+    maxQueuedTasks: 1,
+    isEnabled: true
+  },
+  {
     id: 'Silver',
     name: 'Silver',
     priceMonthly: 1600,
@@ -150,6 +175,7 @@ const DEFAULT_PLANS_TEMPLATE = [
 
 export default function AdminDashboard({ user, onNavigate }) {
   const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'payments' | 'users' | 'generations' | 'plans' | 'settings' | 'security'
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Overview Stats
@@ -762,13 +788,65 @@ export default function AdminDashboard({ user, onNavigate }) {
   ];
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fadeIn text-zinc-900">
+    <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-5 sm:py-8 animate-fadeIn text-zinc-900">
       <div className="bg-white rounded-3xl border border-zinc-200/90 shadow-sm overflow-hidden flex flex-col md:flex-row min-h-[820px]">
+        {/* ===== MOBILE HEADER BAR (Visible only on mobile to hide/expand admin menu) ===== */}
+        <div className="md:hidden flex items-center justify-between px-4 py-3.5 border-b border-zinc-200/80 bg-white sticky top-0 z-20">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-violet-600 to-indigo-600 text-white flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
+              <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                <rect x="2" y="9" width="2.5" height="6" rx="1.25" />
+                <rect x="6.5" y="5" width="2.5" height="14" rx="1.25" />
+                <rect x="11" y="2" width="2.5" height="20" rx="1.25" />
+                <rect x="15.5" y="6" width="2.5" height="12" rx="1.25" />
+                <rect x="20" y="10" width="2.5" height="4" rx="1.25" />
+              </svg>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="font-extrabold text-sm tracking-tight text-zinc-900">VoiceWeave</span>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-violet-100 text-violet-700">Admin</span>
+            </div>
+            <span className="text-zinc-300">/</span>
+            <div className="flex items-center gap-1.5 truncate text-xs font-bold text-violet-700 bg-violet-50 px-2.5 py-1 rounded-lg border border-violet-100/90">
+              <span>{adminNavTabs.find((t) => t.id === activeTab)?.label || 'Overview'}</span>
+              {pendingPaymentsCount > 0 && activeTab !== 'payments' && (
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" title={`${pendingPaymentsCount} pending payment(s)`} />
+              )}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen((prev) => !prev)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 active:scale-95 ${
+              mobileMenuOpen
+                ? 'bg-violet-600 text-white shadow-xs'
+                : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-800 border border-zinc-200'
+            }`}
+            aria-label={mobileMenuOpen ? 'Hide Menu' : 'Expand Menu'}
+          >
+            <span>{mobileMenuOpen ? 'Hide' : 'Menu'}</span>
+            {mobileMenuOpen ? (
+              <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            )}
+          </button>
+        </div>
+
         {/* ===== ASIDE BAR (SIDEBAR Matching Image 1) ===== */}
-        <aside className="w-full md:w-64 border-r border-zinc-200/80 p-5 sm:p-6 flex flex-col justify-between shrink-0 bg-white">
+        <aside
+          className={`${
+            mobileMenuOpen ? 'flex' : 'hidden'
+          } md:flex flex-col w-full md:w-64 border-b md:border-b-0 md:border-r border-zinc-200/80 p-5 sm:p-6 justify-between shrink-0 bg-white transition-all`}
+        >
           <div>
-            {/* Logo */}
-            <div className="flex items-center gap-2 mb-6">
+            {/* Logo (Desktop only, mobile has it in header) */}
+            <div className="hidden md:flex items-center gap-2 mb-6">
               <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-violet-600 to-indigo-600 text-white flex items-center justify-center font-bold text-sm shadow-sm">
                 <svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24">
                   <rect x="2" y="9" width="2.5" height="6" rx="1.25" />
@@ -785,7 +863,7 @@ export default function AdminDashboard({ user, onNavigate }) {
             </div>
 
             {/* Account Profile Card */}
-            <div className="flex items-center gap-3 px-1 py-3 mb-6">
+            <div className="flex items-center gap-3 px-3 py-3 mb-6 bg-zinc-50 md:bg-transparent rounded-2xl md:rounded-none border border-zinc-200/60 md:border-0">
               <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-violet-600 to-indigo-600 text-white font-bold text-sm flex items-center justify-center shrink-0 shadow-xs uppercase">
                 {user?.name ? user.name[0] : 'A'}
               </div>
@@ -804,7 +882,10 @@ export default function AdminDashboard({ user, onNavigate }) {
                 return (
                   <button
                     key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
+                    onClick={() => {
+                      setActiveTab(tab.id);
+                      setMobileMenuOpen(false);
+                    }}
                     className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                       isActive
                         ? 'bg-violet-100/70 text-violet-800 font-bold'
@@ -818,13 +899,15 @@ export default function AdminDashboard({ user, onNavigate }) {
                       <span>{tab.label}</span>
                     </div>
                     {tab.badge && (
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${
-                        tab.isAlert
-                          ? 'bg-amber-400 text-black font-extrabold animate-pulse'
-                          : isActive
-                          ? 'bg-white text-zinc-900 shadow-2xs'
-                          : 'bg-zinc-100 text-zinc-700 border border-zinc-200'
-                      }`}>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${
+                          tab.isAlert
+                            ? 'bg-amber-400 text-black font-extrabold animate-pulse'
+                            : isActive
+                            ? 'bg-white text-zinc-900 shadow-2xs'
+                            : 'bg-zinc-100 text-zinc-700 border border-zinc-200'
+                        }`}
+                      >
                         {tab.badge}
                       </span>
                     )}
@@ -835,18 +918,31 @@ export default function AdminDashboard({ user, onNavigate }) {
           </div>
 
           {/* Bottom Quick Links */}
-          <div className="pt-6 border-t border-zinc-100 space-y-2">
+          <div className="pt-6 border-t border-zinc-100 space-y-2 mt-4 md:mt-0">
             <button
-              onClick={() => onNavigate('dashboard')}
+              onClick={() => {
+                setMobileMenuOpen(false);
+                onNavigate('dashboard');
+              }}
               className="w-full py-2 px-3 rounded-xl text-xs font-bold bg-white hover:bg-zinc-50 text-zinc-800 border border-zinc-200/90 shadow-2xs transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <span>← User View</span>
             </button>
             <button
-              onClick={() => onNavigate('studio')}
+              onClick={() => {
+                setMobileMenuOpen(false);
+                onNavigate('studio');
+              }}
               className="w-full py-2 px-3 rounded-xl text-xs font-bold bg-zinc-900 text-white hover:bg-zinc-800 transition-all flex items-center justify-center gap-2 shadow-xs cursor-pointer"
             >
               <span>🎙️ Studio DAW</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(false)}
+              className="md:hidden w-full py-2 px-3 rounded-xl text-xs font-semibold text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 transition-all flex items-center justify-center gap-1.5 cursor-pointer mt-1"
+            >
+              <span>✕ Close Menu</span>
             </button>
           </div>
         </aside>
@@ -906,108 +1002,158 @@ export default function AdminDashboard({ user, onNavigate }) {
               {/* 4 Metric Cards in a Row (Matching Image 1) */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
                 {/* Card 1: Credits Remaining */}
-                <div className="p-5 rounded-2xl border bg-white border-zinc-200/90 shadow-2xs flex flex-col justify-between">
-                  <div className="text-xs font-semibold text-zinc-600 mb-1">
-                    Credits Remaining
-                  </div>
+                {(() => {
+                  const currentPlan = user?.plan || 'Pro';
+                  const lower = currentPlan.toLowerCase();
+                  const planTotal = lower.includes('studio')
+                    ? 3000000
+                    : lower.includes('pro')
+                    ? 1000000
+                    : lower.includes('lite')
+                    ? 500000
+                    : lower.includes('silver')
+                    ? 250000
+                    : lower.includes('basic')
+                    ? 100000
+                    : 2000;
 
-                  <div className="flex items-center justify-between gap-3 my-1">
-                    <div>
-                      <div className="text-xl sm:text-2xl font-bold text-zinc-900 tracking-tight">
-                        1,845<span className="text-zinc-400 font-normal text-sm"> / 2,000</span>
+                  const currentCredits = typeof user?.credits === 'number' ? user.credits : 1000000;
+                  const maxCredits = Math.max(planTotal, currentCredits);
+                  const remainingPct = maxCredits > 0
+                    ? Math.min(100, Math.max(0, Math.round((currentCredits / maxCredits) * 100)))
+                    : 0;
+                  const usedPct = Math.max(0, 100 - remainingPct);
+
+                  return (
+                    <div className="p-5 rounded-2xl border bg-white border-zinc-200/90 shadow-2xs flex flex-col justify-between">
+                      <div className="text-xs font-semibold text-zinc-600 mb-1">
+                        Credits Remaining
                       </div>
-                      <p className="text-[11px] text-zinc-500 font-medium mt-1">
-                        <span className="font-bold text-zinc-700">92%</span> Used
-                      </p>
-                      <p className="text-[10px] text-zinc-400">reset: 5 days</p>
-                    </div>
 
-                    {/* Circular Progress Gauge (92%) */}
-                    <div className="relative w-13 h-13 shrink-0 flex items-center justify-center">
-                      <svg className="w-13 h-13 transform -rotate-90" viewBox="0 0 36 36">
-                        <path
-                          className="text-zinc-100"
-                          strokeWidth="3.5"
-                          stroke="currentColor"
-                          fill="none"
-                          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                        />
-                        <path
-                          className="text-violet-600 transition-all duration-700 ease-out"
-                          strokeDasharray="92, 100"
-                          strokeLinecap="round"
-                          strokeWidth="3.5"
-                          stroke="currentColor"
-                          fill="none"
-                          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                        />
-                      </svg>
-                      <span className="absolute text-[11px] font-bold font-mono text-zinc-900">
-                        92%
-                      </span>
+                      <div className="flex items-center justify-between gap-3 my-1">
+                        <div>
+                          <div className="text-xl sm:text-2xl font-bold text-zinc-900 tracking-tight">
+                            {currentCredits.toLocaleString()}
+                            <span className="text-zinc-400 font-normal text-sm">
+                              {' '}/ {maxCredits.toLocaleString()}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-zinc-500 font-medium mt-1">
+                            <span className="font-bold text-zinc-700">{usedPct}%</span> Used
+                          </p>
+                          <p className="text-[10px] text-zinc-400">admin quota: Unlimited</p>
+                        </div>
+
+                        {/* Circular Progress Gauge */}
+                        <div className="relative w-13 h-13 shrink-0 flex items-center justify-center">
+                          <svg className="w-13 h-13 transform -rotate-90" viewBox="0 0 36 36">
+                            <path
+                              className="text-zinc-100"
+                              strokeWidth="3.5"
+                              stroke="currentColor"
+                              fill="none"
+                              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                            />
+                            <path
+                              className="text-violet-600 transition-all duration-700 ease-out"
+                              strokeDasharray={`${remainingPct}, 100`}
+                              strokeLinecap="round"
+                              strokeWidth="3.5"
+                              stroke="currentColor"
+                              fill="none"
+                              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                            />
+                          </svg>
+                          <span className="absolute text-[11px] font-bold font-mono text-zinc-900">
+                            {remainingPct}%
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
+                  );
+                })()}
 
                 {/* Card 2: Total Characters Voiced */}
-                <div className="p-5 rounded-2xl border bg-white border-zinc-200/90 shadow-2xs flex flex-col justify-between">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-semibold text-zinc-600">Total Characters Voiced</span>
-                    <div className="w-7 h-7 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center">
-                      <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77zm-2.5 9.77H8l-4 4V7l4 4h3.5l4-4v14l-4-4z" />
-                      </svg>
+                {(() => {
+                  const totalChars = overview?.stats?.totalCharsSynthesized || 0;
+                  const formatChars = (num) => {
+                    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+                    if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+                    return num.toLocaleString();
+                  };
+
+                  return (
+                    <div className="p-5 rounded-2xl border bg-white border-zinc-200/90 shadow-2xs flex flex-col justify-between">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-semibold text-zinc-600">Total Characters Voiced</span>
+                        <div className="w-7 h-7 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center">
+                          <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77zm-2.5 9.77H8l-4 4V7l4 4h3.5l4-4v14l-4-4z" />
+                          </svg>
+                        </div>
+                      </div>
+                      <div className="my-1">
+                        <div className="text-xl sm:text-2xl font-bold text-zinc-900 tracking-tight">
+                          {formatChars(totalChars)}
+                        </div>
+                        <p className="text-[11px] text-emerald-600 font-semibold mt-1">
+                          Platform synthesis total
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="my-1">
-                    <div className="text-xl sm:text-2xl font-bold text-zinc-900 tracking-tight">
-                      238K
-                    </div>
-                    <p className="text-[11px] text-emerald-600 font-semibold mt-1">
-                      +12K this week
-                    </p>
-                  </div>
-                </div>
+                  );
+                })()}
 
                 {/* Card 3: Voice Clones Created */}
-                <div className="p-5 rounded-2xl border bg-white border-zinc-200/90 shadow-2xs flex flex-col justify-between">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-semibold text-zinc-600">Voice Clones Created</span>
-                    <div className="w-7 h-7 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center">
-                      <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z" />
-                      </svg>
+                {(() => {
+                  const voiceCount = overview?.stats?.totalVoices || 4;
+                  return (
+                    <div className="p-5 rounded-2xl border bg-white border-zinc-200/90 shadow-2xs flex flex-col justify-between">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-semibold text-zinc-600">Voice Clones Created</span>
+                        <div className="w-7 h-7 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center">
+                          <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z" />
+                          </svg>
+                        </div>
+                      </div>
+                      <div className="my-1">
+                        <div className="text-xl sm:text-2xl font-bold text-zinc-900 tracking-tight">
+                          {voiceCount} Active Clones
+                        </div>
+                        <p className="text-[11px] text-zinc-500 mt-1">
+                          Neural voice registry
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="my-1">
-                    <div className="text-xl sm:text-2xl font-bold text-zinc-900 tracking-tight">
-                      4 Active Clones
-                    </div>
-                    <p className="text-[11px] text-zinc-500 mt-1">
-                      2 templates available
-                    </p>
-                  </div>
-                </div>
+                  );
+                })()}
 
                 {/* Card 4: Audio Files Saved */}
-                <div className="p-5 rounded-2xl border bg-white border-zinc-200/90 shadow-2xs flex flex-col justify-between">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-semibold text-zinc-600">Audio Files Saved</span>
-                    <div className="w-7 h-7 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center">
-                      <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z" />
-                      </svg>
+                {(() => {
+                  const count = overview?.stats?.audioFilesCount ?? generations.length;
+                  const storageMb = overview?.stats?.audioStorageMb || '0';
+                  return (
+                    <div className="p-5 rounded-2xl border bg-white border-zinc-200/90 shadow-2xs flex flex-col justify-between">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-semibold text-zinc-600">Audio Files Saved</span>
+                        <div className="w-7 h-7 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center">
+                          <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z" />
+                          </svg>
+                        </div>
+                      </div>
+                      <div className="my-1">
+                        <div className="text-xl sm:text-2xl font-bold text-zinc-900 tracking-tight">
+                          {count} Files
+                        </div>
+                        <p className="text-[11px] text-zinc-500 mt-1">
+                          {storageMb} MB server storage
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="my-1">
-                    <div className="text-xl sm:text-2xl font-bold text-zinc-900 tracking-tight">
-                      128 Files
-                    </div>
-                    <p className="text-[11px] text-zinc-500 mt-1">
-                      45MB total storage
-                    </p>
-                  </div>
-                </div>
+                  );
+                })()}
               </div>
 
               {/* Audio Library Table (Matching Image 1) */}
@@ -1233,6 +1379,7 @@ export default function AdminDashboard({ user, onNavigate }) {
                 >
                   <option value="all">All Plans</option>
                   <option value="Free">Free</option>
+                  <option value="Basic">Basic</option>
                   <option value="Silver">Silver</option>
                   <option value="Lite">Lite</option>
                   <option value="Pro">Pro</option>
@@ -1586,7 +1733,7 @@ export default function AdminDashboard({ user, onNavigate }) {
                 type="button"
                 onClick={handleResetPlansToDefaults}
                 className="px-3.5 py-2 rounded-xl text-xs font-bold bg-white hover:bg-zinc-50 text-zinc-600 hover:text-zinc-900 border border-zinc-300 shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
-                title="Restore default Free, Silver, Lite, Pro, and Studio configurations"
+                title="Restore default Free, Basic, Silver, Lite, Pro, and Studio configurations"
               >
                 <span>↻ Reset Defaults</span>
               </button>
@@ -1719,7 +1866,7 @@ export default function AdminDashboard({ user, onNavigate }) {
 
                     <div>
                       <label className="block text-xs font-bold text-zinc-800 mb-1">
-                        Plan Key / Identifier <span className="text-zinc-500 text-[10px] font-normal">(Unique database key, e.g. Free, Silver, Lite, Pro, Studio)</span>
+                        Plan Key / Identifier <span className="text-zinc-500 text-[10px] font-normal">(Unique database key, e.g. Free, Basic, Silver, Lite, Pro, Studio)</span>
                       </label>
                       <input
                         type="text"
@@ -2183,7 +2330,7 @@ export default function AdminDashboard({ user, onNavigate }) {
                               {p.planType} Plan
                             </span>
                             <span className="text-[10px] text-emerald-600 font-mono font-semibold">
-                              +{p.planType === 'Silver' ? '250,000' : p.planType === 'Lite' ? '500,000' : p.planType === 'Pro' ? '1,000,000' : '3,000,000'} chars
+                              +{p.planType === 'Basic' ? '100,000' : p.planType === 'Silver' ? '250,000' : p.planType === 'Lite' ? '500,000' : p.planType === 'Pro' ? '1,000,000' : '3,000,000'} chars
                             </span>
                           </td>
 
@@ -2324,6 +2471,7 @@ export default function AdminDashboard({ user, onNavigate }) {
                   className="w-full px-3.5 py-2 rounded-xl border text-xs bg-white border-zinc-300 text-zinc-900 focus:outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"
                 >
                   <option value="Free">Free Plan</option>
+                  <option value="Basic">Basic Plan</option>
                   <option value="Silver">Silver Plan</option>
                   <option value="Lite">Lite Plan</option>
                   <option value="Pro">Pro Plan</option>
