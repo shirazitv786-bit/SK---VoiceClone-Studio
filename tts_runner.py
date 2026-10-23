@@ -266,7 +266,7 @@ def resolve_neural_voice(reference_wav_path: str, language: str = "en") -> tuple
     return LANGUAGE_VOICE_MAP.get(language[:2].lower(), "en-US-BrianMultilingualNeural"), {}
 
 
-def split_text_into_chunks(text: str, max_chars: int = 2500) -> list:
+def split_text_into_chunks(text: str, max_chars: int = 1600) -> list:
     """
     Splits very long scripts into natural sentence-level chunks when needed.
     """
@@ -473,8 +473,8 @@ async def synthesize_speech_async(
     if HAS_EDGE_TTS:
         os.makedirs(os.path.dirname(os.path.abspath(output_file_path)), exist_ok=True)
 
-        # Fast path for prompts up to 2500 chars: direct single stream without chunking overhead
-        if len(clean_text) <= 2500:
+        # Fast path for short prompts (<= 500 chars): direct single stream with generous timeout
+        if len(clean_text) <= 500:
             saved_ok = False
             last_err = None
             for attempt in range(2):
@@ -486,7 +486,7 @@ async def synthesize_speech_async(
                         pitch=pitch_str,
                         volume=vol_str
                     )
-                    await asyncio.wait_for(comm.save(output_file_path), timeout=45.0)
+                    await asyncio.wait_for(comm.save(output_file_path), timeout=35.0)
                     if os.path.isfile(output_file_path) and os.path.getsize(output_file_path) > 0:
                         saved_ok = True
                         break
@@ -506,36 +506,40 @@ async def synthesize_speech_async(
             else:
                 log_msg(f"[EDGE-TTS Notice] Single stream attempt failed ({last_err}). Seamlessly trying sentence chunk synthesis...")
 
-        # Ultra-fast concurrent multi-chunk synthesis for long scripts (7k - 14k+ chars):
-        # Uses 2500-char natural sentence chunks + concurrent semaphore for 5x-8x faster generation
-        chunks = split_text_into_chunks(clean_text, max_chars=2500)
+        # Multi-chunk path for longer scripts: sequential chunk processing prevents cloud rate limiting
+        chunks = split_text_into_chunks(clean_text, max_chars=450)
         temp_dir = tempfile.mkdtemp(prefix="fast_tts_chunks_")
-        chunk_files = [os.path.join(temp_dir, f"chunk_{i:04d}.mp3") for i in range(len(chunks))]
-        semaphore = asyncio.Semaphore(4)  # Concurrently process up to 4 chunks simultaneously
+        chunk_files = []
+        all_chunks_ok = True
+        chunk_err = None
 
-        async def fetch_chunk(index, chunk_text, dest_path):
-            async with semaphore:
-                for attempt in range(2):
+        try:
+            for i, c_text in enumerate(chunks):
+                c_path = os.path.join(temp_dir, f"chunk_{i:04d}.mp3")
+                chunk_saved = False
+                for chunk_attempt in range(2):
                     try:
                         c = edge_tts.Communicate(
-                            text=chunk_text,
+                            text=c_text,
                             voice=neural_voice_id,
                             rate=rate_str,
                             pitch=pitch_str,
                             volume=vol_str
                         )
-                        await asyncio.wait_for(c.save(dest_path), timeout=50.0)
-                        if os.path.isfile(dest_path) and os.path.getsize(dest_path) > 0:
-                            return True
+                        await asyncio.wait_for(c.save(c_path), timeout=45.0)
+                        if os.path.isfile(c_path) and os.path.getsize(c_path) > 0:
+                            chunk_saved = True
+                            break
                     except Exception as ce:
-                        log_msg(f"[EDGE-TTS Notice] Chunk {index + 1}/{len(chunks)} attempt {attempt + 1} notice: {ce or type(ce).__name__}. Retrying...")
+                        chunk_err = ce
+                        log_msg(f"[EDGE-TTS Notice] Chunk {i + 1}/{len(chunks)} attempt {chunk_attempt + 1} error: {ce or type(ce).__name__}. Retrying...")
                         await asyncio.sleep(0.3)
-                return False
 
-        try:
-            tasks = [fetch_chunk(i, c_text, chunk_files[i]) for i, c_text in enumerate(chunks)]
-            results = await asyncio.gather(*tasks, return_exceptions=False)
-            all_chunks_ok = all(results) and all(os.path.isfile(p) and os.path.getsize(p) > 0 for p in chunk_files)
+                if chunk_saved:
+                    chunk_files.append(c_path)
+                else:
+                    all_chunks_ok = False
+                    break
 
             if all_chunks_ok and chunk_files:
                 concat_mp3_files(chunk_files, output_file_path)
@@ -552,11 +556,10 @@ async def synthesize_speech_async(
                     }
             else:
                 shutil.rmtree(temp_dir, ignore_errors=True)
-                log_msg("[EDGE-TTS Multichunk Notice]: One or more chunks failed. Falling back to offline synthesizer...")
+                log_msg(f"[EDGE-TTS Multichunk Notice]: {chunk_err or 'Chunk generation failed'}. Falling back to offline synthesizer...")
         except Exception as e:
             shutil.rmtree(temp_dir, ignore_errors=True)
             log_msg(f"[EDGE-TTS Multichunk Notice]: {e}. Falling back to offline synthesizer...")
-
 
     # Fallback: Windows Native TTS
     if sys.platform == "win32":

@@ -59,6 +59,32 @@ export default function StudioPage({
     return 'sk_pending_job_guest';
   };
 
+  const getQueueStorageKey = (u) => {
+    if (u?.id) return `sk_queue_user_${u.id}`;
+    if (u?.email) return `sk_queue_user_${String(u.email).toLowerCase().replace(/[^a-z0-9_]/g, '_')}`;
+    return 'sk_queue_guest';
+  };
+
+  const loadUserQueue = (u) => {
+    try {
+      const key = getQueueStorageKey(u);
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {}
+    return [];
+  };
+
+  const saveUserQueue = (u, items) => {
+    try {
+      const key = getQueueStorageKey(u);
+      localStorage.setItem(key, JSON.stringify(items));
+    } catch (e) {}
+  };
+
+
   const loadUserHistory = (u) => {
     try {
       // Clear legacy shared global history key so previous server records never appear
@@ -100,13 +126,27 @@ export default function StudioPage({
   const [downloadingId, setDownloadingId] = useState(null);
   const audioPlayerRef = useRef(null);
 
-  // Switch history immediately when active user logs in, logs out, or switches accounts
+  // Studio Voice Synthesis Queue States
+  const [queue, setQueue] = useState(() => loadUserQueue(user));
+  const queueRef = useRef(queue);
+  queueRef.current = queue;
+
+  const [activeJob, setActiveJob] = useState(null);
+  const activeJobRef = useRef(activeJob);
+  activeJobRef.current = activeJob;
+
+  const isSynthesizingRef = useRef(false);
+  const executeSynthesisRef = useRef(null);
+
+  // Switch history & queue immediately when active user logs in, logs out, or switches accounts
   useEffect(() => {
     setLoadingHistory(true);
     setHistory(loadUserHistory(user));
+    setQueue(loadUserQueue(user));
     setPlayingHistoryId(null);
     setTimeout(() => setLoadingHistory(false), 50);
   }, [user?.id, user?.email]);
+
 
   // Preload script if user clicked "Re-Synthesize" from their Dashboard
   useEffect(() => {
@@ -124,7 +164,7 @@ export default function StudioPage({
     } catch (e) {}
   }, []);
 
-  // Resume in-progress synthesis if user refreshed the browser or navigated away
+  // Resume in-progress synthesis and queue engine if user refreshed the browser or navigated away
   useEffect(() => {
     let pollInterval = null;
     let isCancelled = false;
@@ -133,28 +173,61 @@ export default function StudioPage({
       try {
         const pendingKey = getPendingJobKey(user);
         const saved = localStorage.getItem(pendingKey);
-        if (!saved) return;
+        if (!saved) {
+          const currentQueue = loadUserQueue(user);
+          if (currentQueue && currentQueue.length > 0 && !isSynthesizingRef.current) {
+            const nextJob = currentQueue[0];
+            const remainingQueue = currentQueue.slice(1);
+            setQueue(remainingQueue);
+            saveUserQueue(user, remainingQueue);
+            setTimeout(() => {
+              if (executeSynthesisRef.current) executeSynthesisRef.current(nextJob);
+            }, 300);
+          }
+          return;
+        }
 
         const pending = JSON.parse(saved);
         if (!pending || !pending.jobId) {
           localStorage.removeItem(pendingKey);
+          const currentQueue = loadUserQueue(user);
+          if (currentQueue && currentQueue.length > 0 && !isSynthesizingRef.current) {
+            const nextJob = currentQueue[0];
+            const remainingQueue = currentQueue.slice(1);
+            setQueue(remainingQueue);
+            saveUserQueue(user, remainingQueue);
+            setTimeout(() => {
+              if (executeSynthesisRef.current) executeSynthesisRef.current(nextJob);
+            }, 300);
+          }
           return;
         }
 
-        // Clean up stale jobs older than 10 minutes
         const ageMs = Date.now() - (pending.startedAt || 0);
         if (ageMs > 10 * 60 * 1000) {
           localStorage.removeItem(pendingKey);
+          const currentQueue = loadUserQueue(user);
+          if (currentQueue && currentQueue.length > 0 && !isSynthesizingRef.current) {
+            const nextJob = currentQueue[0];
+            const remainingQueue = currentQueue.slice(1);
+            setQueue(remainingQueue);
+            saveUserQueue(user, remainingQueue);
+            setTimeout(() => {
+              if (executeSynthesisRef.current) executeSynthesisRef.current(nextJob);
+            }, 300);
+          }
           return;
         }
 
-        console.log(`[Studio] Reconnected to in-progress audio synthesis: ${pending.jobId}`);
+        console.log(`[Studio] Reconnected to active synthesis: ${pending.jobId}`);
         setLoading(true);
-        if (pending.text) setText(pending.text);
-        if (pending.referenceVoice) setReferenceVoice(pending.referenceVoice);
-        if (pending.speed !== undefined) setSpeed(pending.speed);
-        if (pending.pitch !== undefined) setPitch(pending.pitch);
-        if (pending.pause !== undefined) setPause(pending.pause);
+        setActiveJob({
+          id: pending.jobId,
+          text: pending.text,
+          voiceName: pending.voiceName || pending.referenceVoice?.replace('.wav', '') || 'Voice Model',
+          referenceVoice: pending.referenceVoice,
+          startedAt: pending.startedAt
+        });
 
         // Ensure optimistic generating card appears in history
         setHistory((prev) => {
@@ -191,7 +264,7 @@ export default function StudioPage({
 
                 const fullUrl = `${API_BASE}${job.audioUrl}`;
                 setAudioUrl(fullUrl);
-                setLoading(false);
+                setActiveJob(null);
 
                 const newRecord = {
                   id: job.id || pending.jobId,
@@ -226,32 +299,56 @@ export default function StudioPage({
                     audioPlayerRef.current.play().catch(() => {});
                   }
                 }, 200);
+
+                // Check and trigger next queued synthesis
+                const currentQueue = queueRef.current;
+                if (currentQueue && currentQueue.length > 0) {
+                  const nextJob = currentQueue[0];
+                  const remainingQueue = currentQueue.slice(1);
+                  setQueue(remainingQueue);
+                  saveUserQueue(user, remainingQueue);
+                  setTimeout(() => {
+                    executeSynthesis(nextJob);
+                  }, 300);
+                } else {
+                  setLoading(false);
+                }
                 return;
               }
 
               if (job.status === 'failed') {
                 if (pollInterval) clearInterval(pollInterval);
                 try { localStorage.removeItem(pendingKey); } catch (e) {}
-                setLoading(false);
+                setActiveJob(null);
                 setErrorMessage(`Synthesis failed: ${job.error || 'Generation error'}`);
                 setHistory((prev) => {
                   const filtered = prev.filter((i) => i.id !== pending.jobId);
                   saveUserHistory(user, filtered);
                   return filtered;
                 });
+
+                // Continue to next queued item if available
+                const currentQueue = queueRef.current;
+                if (currentQueue && currentQueue.length > 0) {
+                  const nextJob = currentQueue[0];
+                  const remainingQueue = currentQueue.slice(1);
+                  setQueue(remainingQueue);
+                  saveUserQueue(user, remainingQueue);
+                  setTimeout(() => {
+                    executeSynthesis(nextJob);
+                  }, 300);
+                } else {
+                  setLoading(false);
+                }
                 return;
               }
             } else if (res.data && res.data.status === 'not_found') {
-              // If not found and job is older than 2.5 minutes, clean up
               if (Date.now() - (pending.startedAt || 0) > 150000) {
                 if (pollInterval) clearInterval(pollInterval);
                 try { localStorage.removeItem(pendingKey); } catch (e) {}
+                setActiveJob(null);
                 setLoading(false);
-                setHistory((prev) => {
-                  const filtered = prev.filter((i) => i.id !== pending.jobId);
-                  saveUserHistory(user, filtered);
-                  return filtered;
-                });
+                setHistory((prev) => prev.filter((i) => i.id !== pending.jobId));
               }
             }
           } catch (pollErr) {
@@ -472,48 +569,53 @@ export default function StudioPage({
     }
   };
 
-  // Form submission handler for Voice Cloning
-  const handleGenerateSubmit = async (e) => {
-    e.preventDefault();
+  // Remove an item from the queue
+  const handleRemoveFromQueue = (indexToRemove) => {
+    setQueue((prev) => {
+      const updated = prev.filter((_, idx) => idx !== indexToRemove);
+      saveUserQueue(user, updated);
+      return updated;
+    });
+  };
 
-    if (!text.trim()) {
-      setErrorMessage('Please enter a script or text prompt before synthesizing.');
-      return;
-    }
+  // Clear all pending items from queue
+  const handleClearQueue = () => {
+    setQueue([]);
+    saveUserQueue(user, []);
+  };
 
-    if (text.length > maxCharsAllowed) {
-      setErrorMessage(`Your script (${text.length.toLocaleString()} characters) exceeds the ${currentPlan} plan limit of ${maxCharsAllowed.toLocaleString()} characters. Please upgrade your package to generate longer audio.`);
-      return;
-    }
+  // Core Sequential Synthesis Executor
+  const executeSynthesis = async (jobItem) => {
+    if (!jobItem || !jobItem.text) return;
+    if (isSynthesizingRef.current) return;
 
-    if (user && user.credits < text.length) {
-      setErrorMessage(`Insufficient credits! You need ${text.length.toLocaleString()} credits, but only have ${user.credits.toLocaleString()} remaining. Please upgrade your package.`);
-      return;
-    }
-
-    if (!referenceVoice) {
-      setErrorMessage('Please select or upload a reference voice sample.');
-      return;
-    }
-
+    isSynthesizingRef.current = true;
     setLoading(true);
     setErrorMessage(null);
 
     const devId = getDeviceId();
-    const tempJobId = `conv_${Date.now()}`;
+    const tempJobId = jobItem.jobId || `conv_${Date.now()}`;
     const pendingKey = getPendingJobKey(user);
 
-    // Save pending job data to localStorage so synthesis can resume if user refreshes
+    setActiveJob({
+      id: tempJobId,
+      text: jobItem.text,
+      voiceName: jobItem.voiceName || jobItem.referenceVoice?.replace('.wav', '') || 'Voice Model',
+      referenceVoice: jobItem.referenceVoice,
+      startedAt: Date.now()
+    });
+
     const pendingJobData = {
       jobId: tempJobId,
       userId: user?.id || null,
       userEmail: user?.email || null,
       deviceId: devId,
-      text: text.trim(),
-      referenceVoice: referenceVoice,
-      speed: speed,
-      pitch: pitch,
-      pause: pause,
+      text: jobItem.text,
+      referenceVoice: jobItem.referenceVoice,
+      voiceName: jobItem.voiceName,
+      speed: jobItem.speed,
+      pitch: jobItem.pitch,
+      pause: jobItem.pause,
       startedAt: Date.now()
     };
 
@@ -528,8 +630,8 @@ export default function StudioPage({
       userEmail: user?.email || null,
       deviceId: devId,
       timestamp: new Date().toISOString(),
-      text: text.trim().length > 120 ? text.trim().substring(0, 120) + '...' : text.trim(),
-      referenceVoice: referenceVoice,
+      text: jobItem.text.length > 120 ? jobItem.text.substring(0, 120) + '...' : jobItem.text,
+      referenceVoice: jobItem.referenceVoice,
       status: 'generating'
     };
 
@@ -543,12 +645,12 @@ export default function StudioPage({
       const token = localStorage.getItem('sk_voiceclone_auth_token');
       const response = await axios.post(`${API_BASE}/api/clone-voice`, {
         jobId: tempJobId,
-        text: text.trim(),
-        referenceVoice: referenceVoice,
+        text: jobItem.text,
+        referenceVoice: jobItem.referenceVoice,
         deviceId: devId,
-        speed: speed,
-        pitch: pitch,
-        pause: pause
+        speed: jobItem.speed,
+        pitch: jobItem.pitch,
+        pause: jobItem.pause
       }, {
         headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
@@ -561,14 +663,14 @@ export default function StudioPage({
         const fullAudioUrl = `${API_BASE}${response.data.audioUrl}`;
         setAudioUrl(fullAudioUrl);
 
-        // Deduct credits with exact database balance sync
         if (onDeductCredits) {
           if (response.data.remainingCredits !== undefined && response.data.remainingCredits !== null) {
             onDeductCredits(response.data.remainingCredits, true);
           } else {
-            onDeductCredits(text.length, false);
+            onDeductCredits(jobItem.text.length, false);
           }
         }
+        if (onRefreshUser) onRefreshUser();
 
         const newRecord = {
           id: response.data.historyRecord?.id || response.data.id || tempJobId,
@@ -576,12 +678,12 @@ export default function StudioPage({
           userEmail: user?.email || null,
           deviceId: devId,
           timestamp: new Date().toISOString(),
-          text: text.trim().length > 120 ? text.trim().substring(0, 120) + '...' : text.trim(),
-          referenceVoice: referenceVoice,
+          text: jobItem.text.length > 120 ? jobItem.text.substring(0, 120) + '...' : jobItem.text,
+          referenceVoice: jobItem.referenceVoice,
           audioUrl: response.data.audioUrl,
-          speed: speed,
-          pitch: pitch,
-          pause: pause,
+          speed: jobItem.speed,
+          pitch: jobItem.pitch,
+          pause: jobItem.pause,
           status: 'ready'
         };
 
@@ -610,9 +712,80 @@ export default function StudioPage({
       const msg = err.response?.data?.error || err.message || 'Error occurred during voice cloning.';
       setErrorMessage(`Synthesis failed: ${msg}`);
     } finally {
-      setLoading(false);
+      isSynthesizingRef.current = false;
+      setActiveJob(null);
+
+      // Check if there are queued audios waiting to synthesize
+      const currentQueue = queueRef.current;
+      if (currentQueue && currentQueue.length > 0) {
+        const nextJob = currentQueue[0];
+        const remainingQueue = currentQueue.slice(1);
+        setQueue(remainingQueue);
+        saveUserQueue(user, remainingQueue);
+
+        setTimeout(() => {
+          executeSynthesis(nextJob);
+        }, 300);
+      } else {
+        setLoading(false);
+      }
     }
   };
+  executeSynthesisRef.current = executeSynthesis;
+
+  // Form submission handler for Voice Cloning & Queue Dispatch
+  const handleGenerateSubmit = async (e) => {
+    if (e) e.preventDefault();
+
+    if (!text.trim()) {
+      setErrorMessage('Please enter a script or text prompt before synthesizing.');
+      return;
+    }
+
+    if (text.length > maxCharsAllowed) {
+      setErrorMessage(`Your script (${text.length.toLocaleString()} characters) exceeds the ${currentPlan} plan limit of ${maxCharsAllowed.toLocaleString()} characters. Please upgrade your package to generate longer audio.`);
+      return;
+    }
+
+    if (user && user.credits < text.length) {
+      setErrorMessage(`Insufficient credits! You need ${text.length.toLocaleString()} credits, but only have ${user.credits.toLocaleString()} remaining. Please upgrade your package.`);
+      return;
+    }
+
+    if (!referenceVoice) {
+      setErrorMessage('Please select or upload a reference voice sample.');
+      return;
+    }
+
+    setErrorMessage(null);
+
+    const voiceDisplayName = currentVoiceObj?.name || referenceVoice.replace('.wav', '');
+    const newJobItem = {
+      jobId: `conv_${Date.now()}`,
+      text: text.trim(),
+      referenceVoice: referenceVoice,
+      voiceName: voiceDisplayName,
+      speed: speed,
+      pitch: pitch,
+      pause: pause,
+      chars: text.trim().length,
+      queuedAt: Date.now()
+    };
+
+    // If an audio is currently synthesizing, add this next text to the Queue!
+    if (loading || isSynthesizingRef.current) {
+      const updatedQueue = [...queueRef.current, newJobItem];
+      setQueue(updatedQueue);
+      saveUserQueue(user, updatedQueue);
+      setText(''); // Clear textarea so user can immediately type their next audio!
+      return;
+    }
+
+    // Nothing is currently synthesizing: execute immediately and clear textarea for next audio
+    setText('');
+    executeSynthesis(newJobItem);
+  };
+
 
   // Preview Voice Sample
   const handlePreviewVoice = () => {
@@ -1166,15 +1339,18 @@ export default function StudioPage({
                 </div>
               )}
 
-              {/* Textarea */}
+              {/* Textarea: Kept active so user can type the next script while one is synthesizing */}
               <div className="relative">
                 <textarea
                   id="script-textarea"
                   rows="6"
                   value={text}
                   onChange={(e) => setText(e.target.value)}
-                  placeholder="Type or paste your text script here in any language (English, Urdu, Hindi, Arabic, Chinese, Spanish, French, German, Japanese, Korean, Italian, etc.)..."
-                  disabled={loading}
+                  placeholder={
+                    loading
+                      ? "Audio is synthesizing below! Type your NEXT script here to queue it for automatic processing..."
+                      : "Type or paste your text script here in any language (English, Urdu, Hindi, Arabic, Chinese, Spanish, French, German, Japanese, Korean, Italian, etc.)..."
+                  }
                   className={`w-full rounded-xl border p-4 text-sm focus:outline-none transition-all resize-y leading-relaxed font-normal ${theme.inputBg}`}
                 />
                 <div className="absolute bottom-3 right-3 text-xs flex items-center gap-2 pointer-events-none select-none text-zinc-500">
@@ -1186,23 +1362,28 @@ export default function StudioPage({
                 </div>
               </div>
 
-              {/* Submit Synthesize Button */}
+              {/* Submit Synthesize / Add to Queue Button */}
               <div className="pt-2 w-full">
                 <button
                   type="button"
                   onClick={handleGenerateSubmit}
-                  disabled={loading || !text.trim() || !referenceVoice || charCount > maxCharsAllowed}
-                  className={`w-full py-4 px-6 rounded-2xl text-sm font-extrabold tracking-wide transition-all duration-200 flex items-center justify-center gap-3 cursor-pointer disabled:cursor-not-allowed active:scale-[0.99] bg-gradient-to-r from-indigo-600 via-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white shadow-xl shadow-indigo-500/25 ${
-                    loading || !text.trim() || !referenceVoice || charCount > maxCharsAllowed ? 'opacity-60' : 'opacity-100'
+                  disabled={!text.trim() || !referenceVoice || charCount > maxCharsAllowed}
+                  className={`w-full py-4 px-6 rounded-2xl text-sm font-extrabold tracking-wide transition-all duration-200 flex items-center justify-center gap-3 cursor-pointer disabled:cursor-not-allowed active:scale-[0.99] ${
+                    loading
+                      ? 'bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 hover:from-amber-700 hover:to-orange-700 text-white shadow-xl shadow-orange-500/20'
+                      : 'bg-gradient-to-r from-indigo-600 via-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white shadow-xl shadow-indigo-500/25'
+                  } ${
+                    !text.trim() || !referenceVoice || charCount > maxCharsAllowed ? 'opacity-60' : 'opacity-100'
                   }`}
                 >
                   {loading ? (
                     <>
-                      <svg width="18" height="18" className="animate-spin h-5 w-5 fill-current shrink-0" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" className="w-5 h-5 shrink-0">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" />
                       </svg>
-                      <span>Synthesizing Studio Audio...</span>
+                      <span>
+                        + Add Next Script to Queue {queue.length > 0 ? `(${queue.length} waiting)` : ''}
+                      </span>
                     </>
                   ) : (
                     <>
@@ -1216,7 +1397,112 @@ export default function StudioPage({
                   )}
                 </button>
               </div>
+
+              {/* Live Synthesis Queue & Processing Monitor */}
+              {(loading || queue.length > 0) && (
+                <div className="p-4 sm:p-5 rounded-2xl border border-indigo-200/90 bg-gradient-to-br from-indigo-50/90 via-purple-50/40 to-white shadow-sm space-y-3.5 mt-2 animate-fadeIn">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <span className="relative flex h-3 w-3">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-3 w-3 bg-indigo-600"></span>
+                      </span>
+                      <h4 className="text-xs sm:text-sm font-bold text-zinc-900 tracking-tight flex items-center gap-2">
+                        Studio Synthesis Queue
+                        <span className="text-[10px] sm:text-[11px] font-mono font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-200">
+                          {loading ? '1 Active' : 'Idle'} {queue.length > 0 ? `• ${queue.length} Queued` : ''}
+                        </span>
+                      </h4>
+                    </div>
+                    {queue.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleClearQueue}
+                        className="text-[11px] font-semibold text-rose-600 hover:text-rose-800 hover:underline cursor-pointer"
+                      >
+                        Clear Queue
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Active Synthesizing Job Banner */}
+                  {loading && (
+                    <div className="p-3.5 rounded-xl bg-white border border-indigo-200 shadow-xs flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                          <svg width="16" height="16" className="animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                          </svg>
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-zinc-900 truncate">
+                              {activeJob?.voiceName || referenceVoice.replace('.wav', '')}
+                            </span>
+                            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 font-bold uppercase tracking-wider">
+                              Synthesizing Now
+                            </span>
+                          </div>
+                          <p className="text-xs text-zinc-500 truncate mt-0.5">
+                            "{activeJob?.text ? (activeJob.text.length > 85 ? activeJob.text.substring(0, 85) + '...' : activeJob.text) : 'Rendering audio...'}"
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-[11px] font-medium text-indigo-600 shrink-0 hidden sm:inline-block">
+                        Auto-playing when ready
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Queued Next Items */}
+                  {queue.length > 0 && (
+                    <div className="space-y-2 pt-1">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 px-1">
+                        Up Next in Queue ({queue.length})
+                      </div>
+                      <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                        {queue.map((item, idx) => (
+                          <div
+                            key={item.id || idx}
+                            className="p-2.5 rounded-xl bg-white/95 border border-zinc-200/90 hover:border-indigo-300 transition-all flex items-center justify-between gap-3 text-xs shadow-2xs"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <span className="w-5 h-5 rounded-md bg-zinc-100 border border-zinc-200 text-zinc-700 font-mono font-bold text-[10px] flex items-center justify-center shrink-0">
+                                #{idx + 1}
+                              </span>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-zinc-900 truncate">{item.voiceName}</span>
+                                  <span className="text-[10px] font-mono text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded">
+                                    {item.chars?.toLocaleString()} chars
+                                  </span>
+                                </div>
+                                <p className="text-zinc-500 truncate mt-0.5">
+                                  "{item.text?.length > 70 ? item.text.substring(0, 70) + '...' : item.text}"
+                                </p>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveFromQueue(idx)}
+                              className="p-1 rounded-md text-zinc-400 hover:text-rose-600 hover:bg-rose-50 transition-colors shrink-0 cursor-pointer"
+                              title="Remove from queue"
+                            >
+                              <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
+
 
             {/* Mastered Output Audio Ready Console (DAW Master Rack Aesthetic) */}
             {audioUrl && (
